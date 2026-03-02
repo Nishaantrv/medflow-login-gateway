@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { externalSupabase } from '@/integrations/external-supabase/client';
+import { callAgent } from '@/services/aiAgent';
 import { Link } from 'react-router-dom';
 import { Calendar, Pill, Bell, MessageSquare, Search, Clock, User, Heart, Droplets, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -66,6 +67,8 @@ const PatientDashboard = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [testCount, setTestCount] = useState<number | null>(null);
+  const [aiTestResult, setAiTestResult] = useState<string | null>(null);
+  const [aiTestLoading, setAiTestLoading] = useState(false);
 
   // Temporary test: query all patients and log results
   useEffect(() => {
@@ -318,7 +321,40 @@ const PatientDashboard = () => {
         >
           <Search size={16} /> Check Symptoms
         </Link>
+        <button
+          onClick={async () => {
+            setAiTestLoading(true);
+            setAiTestResult(null);
+            try {
+              const res = await callAgent({
+                agent_type: 'patient_agent',
+                message: 'What are 3 tips for staying healthy?',
+                patient_context: patient ? { name: patient.full_name, allergies: patient.allergies } : undefined,
+              });
+              console.log('🤖 AI Agent Response:', res);
+              setAiTestResult(res.reply);
+            } catch (err) {
+              console.error('🤖 AI Agent Error:', err);
+              setAiTestResult(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            } finally {
+              setAiTestLoading(false);
+            }
+          }}
+          disabled={aiTestLoading}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm font-medium hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+        >
+          🤖 {aiTestLoading ? 'Calling AI...' : 'Test AI Agent'}
+        </button>
       </div>
+
+      {/* AI Test Result */}
+      {aiTestResult && (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-yellow-200 text-sm">
+          <p className="font-semibold text-yellow-400 mb-2">🤖 AI Agent Response:</p>
+          <p className="whitespace-pre-wrap">{aiTestResult}</p>
+          <span className="block text-xs text-yellow-500 mt-2">Remove this test after verifying.</span>
+        </div>
+      )}
     </div>
   );
 };
