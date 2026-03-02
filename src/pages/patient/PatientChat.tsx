@@ -160,6 +160,7 @@ const PatientChat = () => {
         message: text.trim(),
         patient_context: patientContext,
         conversation_history: history,
+        user_id: user.id,
       });
 
       setMessages(prev => [...prev, {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { externalSupabase } from '@/integrations/external-supabase/client';
+import { supabase as externalSupabase } from '@/integrations/supabase/client';
 import { callAgent } from '@/services/aiAgent';
 import { Link } from 'react-router-dom';
 import { Calendar, Pill, Bell, MessageSquare, Search, Clock, User, Heart, Droplets, AlertTriangle } from 'lucide-react';
@@ -19,15 +19,15 @@ interface Patient {
 
 interface Appointment {
   id: string;
-  appointment_date: string;
-  appointment_time: string;
+  scheduled_date: string;
+  scheduled_time: string;
   status: string;
   doctor: { full_name: string; specialization: string } | null;
 }
 
 interface Medication {
   id: string;
-  medication_name: string;
+  name: string;
   dosage: string;
   frequency: string;
   instructions: string;
@@ -59,93 +59,105 @@ const notifIcons: Record<string, typeof Bell> = {
 };
 
 const PatientDashboard = () => {
-  const { user } = useAuth();
+  const { user, profile, db_id } = useAuth();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [primaryDoctor, setPrimaryDoctor] = useState<string>('');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [testCount, setTestCount] = useState<number | null>(null);
-  const [aiTestResult, setAiTestResult] = useState<string | null>(null);
-  const [aiTestLoading, setAiTestLoading] = useState(false);
 
-  // Temporary test: query all patients and log results
-  useEffect(() => {
-    const testQuery = async () => {
-      const { data, error } = await externalSupabase.from('patients').select('*');
-      console.log('🧪 TEST - External Supabase patients query:', { data, error, count: data?.length });
-      setTestCount(data?.length ?? 0);
-    };
-    testQuery();
-  }, []);
+
 
   useEffect(() => {
-    if (!user) return;
+    if (!db_id) {
+      setLoading(false);
+      return;
+    }
 
     const fetchData = async () => {
       setLoading(true);
 
       // 1. Get patient record
-      const { data: patientData } = await externalSupabase
+      const { data: patientData } = await (externalSupabase as any)
         .from('patients')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', db_id)
         .maybeSingle();
 
       if (!patientData) {
         setLoading(false);
         return;
       }
-      setPatient(patientData);
+      setPatient(patientData as any);
 
       // Parallel fetches
       const [apptRes, medRes, notifRes, docRes] = await Promise.all([
         // Upcoming appointments
-        externalSupabase
+        (externalSupabase as any)
           .from('appointments')
-          .select('id, appointment_date, appointment_time, status, doctor:doctors(full_name, specialization)')
+          .select('id, scheduled_date, scheduled_time, status, doctor:doctor_id(user_id)')
           .eq('patient_id', patientData.id)
           .in('status', ['scheduled', 'confirmed'])
-          .gte('appointment_date', new Date().toISOString().split('T')[0])
-          .order('appointment_date', { ascending: true })
+          .gte('scheduled_date', new Date().toISOString().split('T')[0])
+          .order('scheduled_date', { ascending: true })
           .limit(5),
 
         // Active medications
-        externalSupabase
+        (externalSupabase as any)
           .from('medications')
-          .select('id, medication_name, dosage, frequency, instructions')
+          .select('id, name, dosage, frequency, instructions')
           .eq('patient_id', patientData.id)
           .eq('is_active', true),
 
         // Recent notifications
-        externalSupabase
+        (externalSupabase as any)
           .from('notifications')
           .select('id, type, title, message, created_at')
-          .eq('user_id', user.id)
+          .eq('recipient_id', db_id)
           .order('created_at', { ascending: false })
           .limit(10),
 
-        // Primary doctor name
+        // Primary doctor details (from users table via doctors user_id)
         patientData.primary_doctor_id
-          ? externalSupabase
-              .from('doctors')
-              .select('full_name')
-              .eq('id', patientData.primary_doctor_id)
-              .maybeSingle()
+          ? (externalSupabase as any)
+            .from('doctors')
+            .select('id, specialization, doctor_info:user_id(full_name)')
+            .eq('id', patientData.primary_doctor_id)
+            .maybeSingle()
           : Promise.resolve({ data: null }),
       ]);
 
-      setAppointments((apptRes.data as any) || []);
+      // Need careful mapping for appointments since doctor info is in users table
+      const rawAppts = (apptRes.data as any) || [];
+      const apptsWithDoc = await Promise.all(rawAppts.map(async (appt: any) => {
+        const { data: userData } = await (externalSupabase as any)
+          .from('doctors')
+          .select('specialization, user:user_id(full_name)')
+          .eq('user_id', appt.doctor?.user_id)
+          .maybeSingle();
+        return {
+          ...appt,
+          doctor: {
+            full_name: userData?.user?.full_name || 'Medical Staff',
+            specialization: userData?.specialization || 'Department'
+          }
+        };
+      }));
+
+      setAppointments(apptsWithDoc);
       setMedications((medRes.data as any) || []);
       setNotifications((notifRes.data as any) || []);
-      if (docRes.data) setPrimaryDoctor((docRes.data as any).full_name);
+
+      if (docRes.data) {
+        setPrimaryDoctor((docRes.data as any).doctor_info?.full_name || '');
+      }
 
       setLoading(false);
     };
 
     fetchData();
-  }, [user]);
+  }, [db_id]);
 
   if (loading) {
     return (
@@ -170,15 +182,10 @@ const PatientDashboard = () => {
 
   return (
     <div className="p-6 space-y-6" style={{ background: '#060810', minHeight: '100%' }}>
-      {/* Temporary Test Banner */}
-      <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-yellow-300 text-sm font-mono">
-        🧪 DB Connection Test: {testCount !== null ? `Found ${testCount} patient(s) in external Supabase` : 'Querying...'}
-        <span className="block text-xs text-yellow-500 mt-1">Check browser console for full data. Remove this after verifying.</span>
-      </div>
       {/* Welcome Card */}
       <div className={`${cardStyle} ${cardClasses}`}>
         <h1 className="text-2xl md:text-3xl font-bold text-white font-display mb-1">
-          Welcome back, {patient.full_name} 👋
+          Welcome back, {profile?.full_name || 'Patient'} 👋
         </h1>
         <div className="flex flex-wrap items-center gap-4 mt-4 text-sm text-gray-400">
           <span className="flex items-center gap-1.5">
@@ -233,10 +240,10 @@ const PatientDashboard = () => {
                     </div>
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                       <span className="flex items-center gap-1">
-                        <Calendar size={12} /> {format(new Date(appt.appointment_date), 'MMM d, yyyy')}
+                        <Calendar size={12} /> {format(new Date(appt.scheduled_date), 'MMM d, yyyy')}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Clock size={12} /> {appt.appointment_time}
+                        <Clock size={12} /> {appt.scheduled_time}
                       </span>
                     </div>
                   </div>
@@ -258,7 +265,7 @@ const PatientDashboard = () => {
             <div className="space-y-4">
               {medications.map((med) => (
                 <div key={med.id} className="border-b border-[#1A1F35] pb-3 last:border-0 last:pb-0">
-                  <p className="text-sm font-medium text-white">{med.medication_name}</p>
+                  <p className="text-sm font-medium text-white">{med.name}</p>
                   <p className="text-xs text-teal-400 mt-0.5">{med.dosage} · {med.frequency}</p>
                   {med.instructions && (
                     <p className="text-xs text-gray-500 mt-1">{med.instructions}</p>
@@ -321,40 +328,8 @@ const PatientDashboard = () => {
         >
           <Search size={16} /> Check Symptoms
         </Link>
-        <button
-          onClick={async () => {
-            setAiTestLoading(true);
-            setAiTestResult(null);
-            try {
-              const res = await callAgent({
-                agent_type: 'patient_agent',
-                message: 'What are 3 tips for staying healthy?',
-                patient_context: patient ? { name: patient.full_name, allergies: patient.allergies } : undefined,
-              });
-              console.log('🤖 AI Agent Response:', res);
-              setAiTestResult(res.reply);
-            } catch (err) {
-              console.error('🤖 AI Agent Error:', err);
-              setAiTestResult(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
-            } finally {
-              setAiTestLoading(false);
-            }
-          }}
-          disabled={aiTestLoading}
-          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm font-medium hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
-        >
-          🤖 {aiTestLoading ? 'Calling AI...' : 'Test AI Agent'}
-        </button>
       </div>
 
-      {/* AI Test Result */}
-      {aiTestResult && (
-        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-yellow-200 text-sm">
-          <p className="font-semibold text-yellow-400 mb-2">🤖 AI Agent Response:</p>
-          <p className="whitespace-pre-wrap">{aiTestResult}</p>
-          <span className="block text-xs text-yellow-500 mt-2">Remove this test after verifying.</span>
-        </div>
-      )}
     </div>
   );
 };

@@ -29,16 +29,20 @@ export interface AgentResponse {
 export async function callAgent({
   agent_type,
   message,
+  user_message,
   patient_context,
   conversation_history,
+  user_id,
 }: {
   agent_type: AgentType;
-  message: string;
+  message?: string;
+  user_message?: string;
   patient_context?: PatientContext;
   conversation_history?: ConversationMessage[];
+  user_id?: string;
 }): Promise<AgentResponse> {
   const { data, error } = await supabase.functions.invoke("ai-agent", {
-    body: { agent_type, message, patient_context, conversation_history },
+    body: { agent_type, message, user_message, patient_context, conversation_history, user_id },
   });
 
   if (error) {

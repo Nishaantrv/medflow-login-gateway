@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 type AgentType = "patient_agent" | "doctor_agent" | "hospital_agent" | "family_agent" | "data_agent";
@@ -26,7 +27,10 @@ serve(async (req) => {
   }
 
   try {
-    const { agent_type, message, patient_context, conversation_history } = await req.json();
+    const { agent_type, message, user_message, patient_context, conversation_history, user_id } = await req.json();
+
+    // Support both 'message' and 'user_message' as requested
+    const finalUserMessage = message || user_message;
 
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) {
@@ -40,23 +44,22 @@ serve(async (req) => {
       );
     }
 
-    let systemContent = systemPrompts[agent_type as AgentType];
+    const systemContent = systemPrompts[agent_type as AgentType];
 
-    // Append patient context if provided
-    if (patient_context) {
-      systemContent += `\n\nPatient Context:\n${JSON.stringify(patient_context, null, 2)}`;
-    }
-
+    // Prepare messages for OpenAI API
     const messages = [
       { role: "system", content: systemContent },
       ...(conversation_history || []),
-      { role: "user", content: message },
+      {
+        role: "user",
+        content: `Patient Context: ${JSON.stringify(patient_context || {})}\n\nMessage: ${finalUserMessage}`
+      },
     ];
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -70,14 +73,6 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("OpenAI API error:", response.status, errorText);
-
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       return new Response(
         JSON.stringify({ error: "AI service error", details: errorText }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -85,10 +80,28 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || "No response generated.";
+    const reply = data.choices[0].message.content;
+
+    // STORE IN DATABASE
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+      const { error: dbError } = await supabase.from("chat_history").insert({
+        user_id: user_id || null, // Optional user association
+        agent_type: agent_type,
+        message: finalUserMessage,
+        response: reply,
+        sender_type: 'user'
+      });
+
+      if (dbError) console.error("Error storing chat history:", dbError);
+    }
 
     return new Response(
-      JSON.stringify({ reply, usage: data.usage }),
+      JSON.stringify({ reply }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
