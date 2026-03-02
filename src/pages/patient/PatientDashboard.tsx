@@ -65,6 +65,17 @@ const PatientDashboard = () => {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testCount, setTestCount] = useState<number | null>(null);
+
+  // Temporary test: query all patients and log results
+  useEffect(() => {
+    const testQuery = async () => {
+      const { data, error } = await externalSupabase.from('patients').select('*');
+      console.log('🧪 TEST - External Supabase patients query:', { data, error, count: data?.length });
+      setTestCount(data?.length ?? 0);
+    };
+    testQuery();
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -156,6 +167,11 @@ const PatientDashboard = () => {
 
   return (
     <div className="p-6 space-y-6" style={{ background: '#060810', minHeight: '100%' }}>
+      {/* Temporary Test Banner */}
+      <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 text-yellow-300 text-sm font-mono">
+        🧪 DB Connection Test: {testCount !== null ? `Found ${testCount} patient(s) in external Supabase` : 'Querying...'}
+        <span className="block text-xs text-yellow-500 mt-1">Check browser console for full data. Remove this after verifying.</span>
+      </div>
       {/* Welcome Card */}
       <div className={`${cardStyle} ${cardClasses}`}>
         <h1 className="text-2xl md:text-3xl font-bold text-white font-display mb-1">
