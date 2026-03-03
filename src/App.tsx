@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { lazy, Suspense } from "react";
+import { Shield } from "lucide-react";
 import Login from "./pages/Login";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
@@ -35,31 +36,40 @@ const FamilyNotifications = lazy(() => import("./pages/family/FamilyNotification
 
 const queryClient = new QueryClient();
 
-const Loading = () => (
-  <div className="flex min-h-screen items-center justify-center" style={{ background: '#060810', color: '#6b7280' }}>
-    Loading...
+const MedicalPulseLoader = () => (
+  <div className="flex min-h-screen items-center justify-center bg-[#060810]" style={{ perspective: '1000px' }}>
+    <div className="relative">
+      <div className="w-16 h-16 rounded-full border-4 border-teal-500/20 animate-ping absolute inset-0" />
+      <div className="w-16 h-16 rounded-full border-4 border-teal-500 flex items-center justify-center relative z-10 animate-pulse">
+        <Shield className="text-teal-400" size={32} />
+      </div>
+      <div className="mt-8 text-center">
+        <p className="text-xs font-black uppercase tracking-[0.3em] text-teal-500 animate-pulse">Initializing MedFlow Core</p>
+        <p className="text-[10px] text-gray-600 mt-2 font-bold uppercase tracking-widest">Day 5: Agentic Systems Active</p>
+      </div>
+    </div>
   </div>
 );
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading } = useAuth();
-  if (loading) return <Loading />;
+  if (loading) return <MedicalPulseLoader />;
   if (!session) return <Navigate to="/" replace />;
   return <>{children}</>;
 };
 
 const RoleRedirect = () => {
   const { session, role, loading } = useAuth();
-  if (loading) return <Loading />;
+  if (loading) return <MedicalPulseLoader />;
   if (!session) return <Login />;
   if (role) return <Navigate to={`/${role}/dashboard`} replace />;
-  return <Loading />;
+  return <MedicalPulseLoader />;
 };
 
 const ProtectedLayout = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute>
     <DashboardLayout>
-      <Suspense fallback={<Loading />}>{children}</Suspense>
+      <Suspense fallback={<MedicalPulseLoader />}>{children}</Suspense>
     </DashboardLayout>
   </ProtectedRoute>
 );

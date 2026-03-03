@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { externalSupabase } from '@/integrations/external-supabase/client';
 import { callAgent, type ConversationMessage, type PatientContext } from '@/services/aiAgent';
-import { Send, Brain } from 'lucide-react';
+import { Send, Brain, AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { Badge } from '@/components/ui/badge';
 
 interface ChatMessage {
   id: string;
@@ -61,8 +63,34 @@ const TypingIndicator = () => (
   </div>
 );
 
+const TriageBadge = ({ content }: { content: string }) => {
+  if (content.includes('[TRIAGE: EMERGENCY]')) {
+    return (
+      <Badge className="mb-2 bg-red-500/20 text-red-500 border-red-500/30 flex items-center gap-1.5 w-fit">
+        <AlertTriangle size={12} /> Emergency: Seek Immediate Care
+      </Badge>
+    );
+  }
+  if (content.includes('[TRIAGE: URGENT]')) {
+    return (
+      <Badge className="mb-2 bg-orange-500/20 text-orange-500 border-orange-500/30 flex items-center gap-1.5 w-fit">
+        <AlertTriangle size={12} /> Urgent: Contact Doctor Soon
+      </Badge>
+    );
+  }
+  if (content.includes('[TRIAGE: ROUTINE]')) {
+    return (
+      <Badge className="mb-2 bg-teal-500/20 text-teal-400 border-teal-500/30 flex items-center gap-1.5 w-fit">
+        Routine: Monitor & Schedule Follow-up
+      </Badge>
+    );
+  }
+  return null;
+};
+
 const PatientChat = () => {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -135,6 +163,14 @@ const PatientChat = () => {
     loadContext();
   }, [user]);
 
+  // Handle auto-prompt from URL
+  useEffect(() => {
+    const promptValue = searchParams.get('prompt');
+    if (promptValue === 'symptom-check' && patientContext && messages.length === 1) {
+      sendMessage("I want to check some symptoms I've been experiencing. Can you help me understand what might be going on?");
+    }
+  }, [searchParams, patientContext, messages.length]);
+
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isTyping) return;
 
@@ -203,8 +239,11 @@ const PatientChat = () => {
                   <Brain size={16} className="text-teal-400" />
                 </div>
                 <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-[#0C0F1A] border border-[#1A1F35] text-sm text-gray-200">
+                  <TriageBadge content={msg.content} />
                   <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown>
+                      {msg.content.replace(/\[TRIAGE: (EMERGENCY|URGENT|ROUTINE)\]/g, '')}
+                    </ReactMarkdown>
                   </div>
                   <p className="text-[10px] text-gray-600 mt-2">
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

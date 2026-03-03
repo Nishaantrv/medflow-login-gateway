@@ -1,11 +1,32 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase as externalSupabase } from '@/integrations/supabase/client';
-import { Calendar, Clock, User, ChevronRight, Search, Plus } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, ChevronRight, Search, Plus, Check } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/use-toast";
+import { toast } from "sonner";
 
 interface Appointment {
   id: string;
@@ -23,6 +44,13 @@ const PatientAppointments = () => {
   const { db_id } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedTime, setSelectedTime] = useState<string>("09:00");
+  const [patientRecordId, setPatientRecordId] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!db_id) return;
@@ -30,7 +58,6 @@ const PatientAppointments = () => {
     const fetchAppointments = async () => {
       setLoading(true);
       try {
-        // 1. Get the patient record first
         const { data: patientData } = await (externalSupabase as any)
           .from('patients')
           .select('id')
@@ -38,8 +65,8 @@ const PatientAppointments = () => {
           .maybeSingle();
 
         if (patientData) {
-          // 2. Fetch all appointments for this patient
-          const { data, error } = await (externalSupabase as any)
+          setPatientRecordId(patientData.id);
+          const { data } = await (externalSupabase as any)
             .from('appointments')
             .select(`
               id, 
@@ -57,8 +84,19 @@ const PatientAppointments = () => {
 
           if (data) setAppointments(data as any);
         }
+
+        // Fetch Doctors
+        const { data: docs } = await (externalSupabase as any)
+          .from('doctors')
+          .select(`
+            id,
+            specialization,
+            user:user_id (full_name)
+          `);
+        if (docs) setDoctors(docs);
+
       } catch (err) {
-        console.error('Error fetching appointments:', err);
+        console.error('Error fetching data:', err);
       } finally {
         setLoading(false);
       }
@@ -66,6 +104,47 @@ const PatientAppointments = () => {
 
     fetchAppointments();
   }, [db_id]);
+
+  const handleBooking = async () => {
+    if (!selectedDoctorId || !selectedDate || !selectedTime || !patientRecordId) {
+      toast.error("Please fill in all fields.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await (externalSupabase as any)
+        .from('appointments')
+        .insert({
+          patient_id: patientRecordId,
+          doctor_id: selectedDoctorId,
+          scheduled_date: format(selectedDate, 'yyyy-MM-dd'),
+          scheduled_time: selectedTime,
+          status: 'scheduled'
+        });
+
+      if (error) throw error;
+
+      toast.success("Appointment booked successfully!");
+      setIsBookingOpen(false);
+
+      // Refresh appointments
+      const { data } = await (externalSupabase as any)
+        .from('appointments')
+        .select(`
+          id, scheduled_date, scheduled_time, status,
+          doctor:doctor_id (id, specialization, user:user_id (full_name))
+        `)
+        .eq('patient_id', patientRecordId)
+        .order('scheduled_date', { ascending: false });
+      if (data) setAppointments(data as any);
+
+    } catch (err: any) {
+      toast.error(err.message || "Failed to book appointment");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
@@ -96,15 +175,96 @@ const PatientAppointments = () => {
           <h1 className="text-2xl font-bold text-white mb-1 font-display">My Appointments</h1>
           <p className="text-gray-400 text-sm">View and manage your scheduled hospital visits</p>
         </div>
-        <Button className="bg-teal-500 hover:bg-teal-600 text-white rounded-xl">
-          <Plus size={18} className="mr-2" /> Book New
-        </Button>
+        <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-teal-500 hover:bg-teal-600 text-white rounded-xl">
+              <Plus size={18} className="mr-2" /> Book New
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px] bg-[#0C0F1A] border-[#1A1F35] text-white">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold">Book Appointment</DialogTitle>
+              <DialogDescription className="text-gray-400">
+                Choose your doctor and preferred time slot.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-400">Select Doctor</label>
+                <Select onValueChange={setSelectedDoctorId} value={selectedDoctorId}>
+                  <SelectTrigger className="bg-[#1A1F35] border-[#2A2F45] text-white">
+                    <SelectValue placeholder="Select a specialist" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1A1F35] border-[#2A2F45] text-white">
+                    {doctors.map((doc) => (
+                      <SelectItem key={doc.id} value={doc.id}>
+                        Dr. {doc.user?.full_name} ({doc.specialization})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-400">Select Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal bg-[#1A1F35] border-[#2A2F45] text-white hover:bg-[#2A2F45]",
+                        !selectedDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-[#1A1F35] border-[#2A2F45]" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      initialFocus
+                      className="bg-[#1A1F35] text-white"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-400">Time Slot</label>
+                <Select onValueChange={setSelectedTime} value={selectedTime}>
+                  <SelectTrigger className="bg-[#1A1F35] border-[#2A2F45] text-white">
+                    <SelectValue placeholder="Select time" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1A1F35] border-[#2A2F45] text-white">
+                    {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'].map((time) => (
+                      <SelectItem key={time} value={time}>
+                        {time}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={handleBooking}
+                disabled={isSubmitting}
+                className="w-full bg-teal-500 hover:bg-teal-600 text-white"
+              >
+                {isSubmitting ? "Booking..." : "Confirm Booking"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="space-y-4">
         {appointments.length === 0 ? (
           <div className="text-center py-20 bg-[#0C0F1A] border border-[#1A1F35] rounded-2xl">
-            <Calendar className="mx-auto text-gray-700 mb-4" size={48} />
+            <CalendarIcon className="mx-auto text-gray-700 mb-4" size={48} />
             <p className="text-gray-400">No appointments found.</p>
           </div>
         ) : (
@@ -124,7 +284,7 @@ const PatientAppointments = () => {
                 <div className="flex flex-col">
                   <span className="text-xs text-gray-500 uppercase tracking-wider mb-1">Date & Time</span>
                   <div className="flex items-center gap-3 text-sm text-white">
-                    <span className="flex items-center gap-1.5"><Calendar size={14} className="text-gray-500" /> {format(new Date(appt.scheduled_date), 'MMM d, yyyy')}</span>
+                    <span className="flex items-center gap-1.5"><CalendarIcon size={14} className="text-gray-500" /> {format(new Date(appt.scheduled_date), 'MMM d, yyyy')}</span>
                     <span className="flex items-center gap-1.5"><Clock size={14} className="text-gray-500" /> {appt.scheduled_time}</span>
                   </div>
                 </div>

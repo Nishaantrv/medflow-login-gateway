@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase as externalSupabase } from '@/integrations/supabase/client';
 import { Calendar, Users, Star, ClipboardList, Clock, User, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface DoctorData {
   id: string;
@@ -20,6 +22,7 @@ interface Appointment {
   scheduled_date: string;
   scheduled_time: string;
   status: string;
+  patient_id: string;
   patient: { full_name: string; email: string } | null;
 }
 
@@ -161,7 +164,7 @@ const DoctorDashboard = () => {
               <p className="text-gray-500 py-4 text-center">No appointments scheduled.</p>
             ) : (
               appointments.map((appt) => (
-                <div key={appt.id} className="flex items-center justify-between p-4 rounded-xl bg-[#1A1F35]/30 border border-[#1A1F35] hover:border-teal-500/30 transition-colors">
+                <div key={appt.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-[#1A1F35]/30 border border-[#1A1F35] hover:border-teal-500/30 transition-colors gap-4">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-teal-500/10 flex items-center justify-center text-teal-400">
                       <User size={20} />
@@ -169,14 +172,20 @@ const DoctorDashboard = () => {
                     <div>
                       <p className="text-white font-medium">{appt.patient?.full_name}</p>
                       <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
-                        <span className="flex items-center gap-1"><Calendar size={12} /> {format(new Date(appt.scheduled_date), 'MMM d, yyyy')}</span>
+                        <span className="flex items-center gap-1"><Calendar size={12} /> {format(new Date(appt.scheduled_date), 'MMM d')}</span>
                         <span className="flex items-center gap-1"><Clock size={12} /> {appt.scheduled_time}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge className={statusColors[appt.status]}>{appt.status}</Badge>
-                    <ChevronRight className="text-gray-600" size={18} />
+                  <div className="flex items-center justify-between sm:justify-end gap-3">
+                    <Badge className={cn("text-[10px] uppercase px-2 py-0", statusColors[appt.status])}>{appt.status}</Badge>
+                    <Link
+                      to={`/doctor/soap-notes?patientId=${appt.patient_id}&appointmentId=${appt.id}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-teal-500/10 text-teal-400 text-xs font-medium hover:bg-teal-500/20 transition-colors"
+                    >
+                      <ClipboardList size={14} /> Start Visit
+                    </Link>
+                    <ChevronRight className="text-gray-600 hidden sm:block" size={18} />
                   </div>
                 </div>
               ))

@@ -1,78 +1,101 @@
 # 🏥 MedFlow AI - Intelligent Healthcare Gateway
 
-MedFlow AI is an advanced, AI-driven healthcare management platform that provides distinct, context-aware portals for patients, doctors, hospital administrators, and family members. It leverages real-time data and LLM-powered agents to streamline clinical workflows and improve patient care.
+MedFlow AI is a state-of-the-art, AI-driven healthcare management platform designed to revolutionize the clinical experience. It provides distinct, context-aware portals for **Patients**, **Doctors**, **Hospital Administrators**, and **Family Members**, all unified by a powerful multi-agent AI ecosystem.
 
 ---
 
-## 📈 Current Project Progress Summary
+## 🌟 Key Highlights
 
-This project has successfully completed the core architecture, multi-role dashboard systems, and the underlying AI microservices. Below is a detailed breakdown of the functionality implemented to date.
-
-### 1. 🔐 Core Infrastructure & Security
-- **Supabase Integration**: Robust backend using Supabase for authentication, real-time database, and edge functions.
-- **Role-Based Access Control (RBAC)**: Secure redirection logic based on user roles (`patient`, `doctor`, `admin`, `family`).
-- **Unified Login Experience**: A stunning, high-contrast dark medical theme login interface.
-- **Relational Database Schema**: 12+ optimized tables for patients, appointments, clinical records, medications, hospital resources, and more.
-
-### 2. 🤖 AI Agent Ecosystem (`src/services/aiAgent.ts`)
-- **Centralized AI Service**: An extensible API gateway connecting the frontend to specialized LLM agents via Supabase Edge Functions.
-- **Context-Aware Processing**: Capability to feed patient history, lab results, and real-time status into AI prompts for accurate medical summaries.
-- **Conversation State**: Persistent chat history storage for continuous interactions with AI assistants.
-- **Multilingual Support**: Edge functions configured to handle diverse clinical queries.
+- **Multi-Agent Architecture**: Discrete AI agents tailored for clinical, administrative, and patient support roles.
+- **Real-Time Integration**: Built on Supabase for instant data synchronization across all user portals.
+- **Premium Design Logic**: High-contrast dark medical theme with fluid animations and responsive layouts.
+- **Predictive Intelligence**: AI-powered features like Predictive Discharge and Automated Clinical Summaries.
 
 ---
 
-## 🖥️ Portals & Features (What's Done)
+## 📖 Build History & Walkthroughs
 
-### 🩺 Doctor Dashboard
-- **Schedule Management**: Full calendar/list view of upcoming clinical appointments.
-- **My Patients**: Filterable database of assigned patients with clinical status markers.
-- **AI SOAP Note Generator**: Intelligent tool to convert raw transcribed text into structured **S**ubjective, **O**bjective, **A**ssessment, and **P**lan notes.
-- **Clinical Analytics**: Quick stats for patient volume and clinical tasks.
+The project was developed over a 5-day intensive build. You can explore the detailed evolution here:
 
-### 👤 Patient Portal
-- **Health Dashboard**: Real-time view of vital health metrics and upcoming appointments.
-- **Medication Management**: List of active prescriptions with dosage details.
-- **AI Health Companion**: WhatsApp-style chat interface for medical queries and symptom triage.
-- **Appointment Booking**: Integrated scheduling system for specialty and doctor selection.
-
-### 🏢 Hospital Admin (Hospital Agent)
-- **Bed Management**: Real-time grid of hospital bed occupancy across different departments.
-- **Staff Scheduling**: Unified view of doctors, nurses, and administrative staff shifts.
-- **Financial Gateway**: Billing and financial overview dashboard for hospital operations.
-- **Operational Stats**: Admissions, discharges, and occupancy rate visuals.
-
-### 👨‍👩‍👧 Family Portal
-- **Patient Status**: Plain-language updates on a loved one's clinical status (powered by AI translation).
-- **Visit Scheduler**: Tool to coordinate hospital visits according to facility policies.
-- **Support Chat**: Direct channel for family members to ask administrative or general health questions.
+- [📅 Day 1: Database & AI Foundation](./docs/walkthroughs/day1.md)
+- [📅 Day 2: Patient Agent & Appointments](./docs/walkthroughs/day2.md)
+- [📅 Day 3: Doctor Agent & Clinical SOAP Notes](./docs/walkthroughs/day3.md)
+- [📅 Day 4: Hospital & Family Ecosystem](./docs/walkthroughs/day4.md)
+- [📅 Day 5: Premium UI & Final Integration](./docs/walkthroughs/day5.md)
 
 ---
 
-## 🛠️ Tech Stack
-- **Frontend**: Vite, React, TypeScript.
-- **Styling**: Tailwind CSS, Shadcn UI, Framer Motion (micro-animations).
-- **Backend**: Supabase (Auth, DB, Edge Functions).
-- **AI**: Claude 3.5 Sonnet / GPT-4o via Edge Functions.
-- **State Management**: React Query (TanStack Query) for seamless data fetching.
+## 🤖 AI Agent Ecosystem
 
-## 🚀 How to Run Locally
-1. **Clone & Install**:
+MedFlow AI leverages a sophisticated `ai-agent` edge function (implemented with Claude 3.5 Sonnet) that powers specialized behavior for each role:
+
+- **Clinical Agent**: Assists doctors with SOAP note generation, patient briefings, and diagnostic suggestions.
+- **Patient Agent**: Provides 24/7 symptom triage, medication reminders, and general health question answering.
+- **Admin Agent**: Analyzes hospital data for predictive discharge trends and resource optimization.
+- **Family Agent**: Translates complex medical jargon into plain language for clear family updates.
+
+---
+
+## 🖥️ Portals & Features
+
+### 🩺 Doctor Portal (The Clinical Hub)
+- **AI SOAP Note Generator**: Converts raw clinical notes into professional, structured records automatically.
+- **Intelligent Briefing Cards**: Provides a concise AI-generated summary of a patient's entire history before a consultation.
+- **Smart Patient Queue**: Real-time tracking of patient status with visual urgency markers.
+- **E-Prescribing & Labs**: Integrated order management for medications and diagnostic tests.
+
+### 👤 Patient Portal (The Personal Health Companion)
+- **AI Health Bot**: A WhatsApp-style interface for instant health questions and clinical support.
+- **Smart Appointments**: Intelligent scheduling with specialty-based doctor matching.
+- **Health Snapshot**: Real-time vital monitoring and active medication tracking.
+- **Secure Records**: One-tap access to labs, imaging, and past clinical summaries.
+
+### 🏢 Admin Portal (The Hospital Command Center)
+- **Predictive Bed Management**: Visual grid of all hospital beds with AI-driven discharge predictions.
+- **Operational Insights**: Real-time analytics on admissions, occupancy rates, and staff efficiency.
+- **Staff Rostering**: Unified scheduling system with role-based filters (Nurses, MDs, Admins).
+- **Billing Intelligence**: Overview of financial operations and billing cycles.
+
+### 👨‍👩‍👧 Family Portal (The Care Circle)
+- **Plain-Language Updates**: AI-powered "translation" of clinical statuses into clear, jargon-free updates for family members.
+- **Visit Scheduling**: Seamless coordination of hospital visits aligned with facility policies.
+- **Direct Care-Line**: Secure communication channel for administrative or general inquiries.
+
+---
+
+## 🛠️ Technology Stack
+
+- **Frontend**: `Vite`, `React 18`, `TypeScript`
+- **Styling**: `Tailwind CSS`, `Shadcn UI`, `Lucide Icons`, `Framer Motion`
+- **Backend**: `Supabase` (Auth, PostgreSQL, Realtime)
+- **AI Microservices**: `Supabase Edge Functions` + `Claude 3.5 Sonnet` / `GPT-4o`
+- **Data Fetching**: `React Query` (TanStack Query)
+- **Navigation**: `React Router v6`
+
+---
+
+## 🚀 Local Development
+
+1. **Prerequisites**: Ensure you have [Node.js](https://nodejs.org/) installed.
+2. **Clone & Install**:
    ```bash
    git clone <repo-url>
    cd medflow-login-gateway
    npm install
    ```
-2. **Setup Env**: Create a `.env` file with `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-3. **Start Development**:
+3. **Environment Setup**:
+   - Create a `.env` file in the root directory.
+   - Add your credentials:
+     ```env
+     VITE_SUPABASE_URL=your_supabase_url
+     VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+     ```
+4. **Run the App**:
    ```bash
    npm run dev
    ```
 
 ---
 
-## 📅 Roadmap: What's Next?
-- [ ] **Cross-Agent Notifications**: Real-time push alerts when a SOAP note is signed or a lab result arrives.
-- [ ] **Bed Admission Flow**: Finalize the "Admit" button logic in the Admin Bed View.
-- [ ] **Symptom Triage Logic**: Enhance the Patient Agent's ability to trigger emergency alerts.
-- [ ] **Performance Polish**: Optimization of loading skeletons and edge-case error handling.
+## ✅ Final Project Status: 100% COMPLETED
+All milestones from the 5-day roadmap have been successfully implemented, verified, and polished. MedFlow AI is ready for demonstration.
