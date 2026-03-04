@@ -47,6 +47,12 @@ export async function callAgent({
 
   if (error) {
     console.error("AI agent call failed:", error);
+
+    // Check for common connectivity errors
+    if (error.message?.includes("Failed to fetch")) {
+      throw new Error("AI Service connectivity error. Please ensure Supabase Edge Functions are deployed and reachable.");
+    }
+
     throw new Error(error.message || "Failed to call AI agent");
   }
 
