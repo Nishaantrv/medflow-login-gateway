@@ -19,6 +19,7 @@ export interface ConversationMessage {
 
 export interface AgentResponse {
   reply: string;
+  conversation_id?: string;
   triage_level?: "EMERGENCY" | "URGENT" | "ROUTINE" | null;
   suggested_action?: string | null;
   action_items?: string[] | null;
@@ -36,6 +37,7 @@ export async function callAgent({
   patient_context,
   conversation_history,
   user_id,
+  conversation_id,
 }: {
   agent_type: AgentType;
   message?: string;
@@ -43,9 +45,10 @@ export async function callAgent({
   patient_context?: PatientContext;
   conversation_history?: ConversationMessage[];
   user_id?: string;
+  conversation_id?: string;
 }): Promise<AgentResponse> {
   const { data, error } = await supabase.functions.invoke("ai-agent", {
-    body: { agent_type, message, user_message, patient_context, conversation_history, user_id },
+    body: { agent_type, message, user_message, patient_context, conversation_history, user_id, conversation_id },
   });
 
   if (error) {

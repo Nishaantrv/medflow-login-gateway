@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { externalSupabase } from '@/integrations/external-supabase/client';
+import { supabase as externalSupabase } from '@/integrations/supabase/client';
 import { callAgent, type ConversationMessage, type PatientContext } from '@/services/aiAgent';
-import { Send, Brain, AlertTriangle } from 'lucide-react';
+import { Send, Brain, AlertTriangle, Plus, Search, MessageSquare, History, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ChatMessage {
   id: string;
@@ -14,6 +17,13 @@ interface ChatMessage {
   timestamp: Date;
   triage_level?: "EMERGENCY" | "URGENT" | "ROUTINE" | null;
   suggested_action?: string | null;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface PatientData {
@@ -27,8 +37,8 @@ interface PatientData {
 }
 
 const quickChips = [
-  { emoji: '📅', label: 'Book Appointment', message: 'I would like to book a new appointment. What doctors and time slots are available?' },
-  { emoji: '💊', label: 'My Medications', message: 'Can you tell me about my current medications, their dosages, and any important instructions?' },
+  { emoji: '📅', label: 'Book Appointment', message: 'I want to book a new appointment. Please show me available doctors and help me schedule it.' },
+  { emoji: '💊', label: 'My Medications', message: 'Can you list my current active medications and their instructions?' },
   { emoji: '🔍', label: 'Check Symptoms', message: 'I want to check some symptoms I\'ve been experiencing. Can you help me understand what might be going on?' },
   { emoji: '📋', label: 'Lab Results', message: 'Can you help me understand my recent lab results and what they mean?' },
 ];
@@ -91,13 +101,18 @@ const TriageBadge = ({ level }: { level?: string | null }) => {
 };
 
 const PatientChat = () => {
-  const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const { user, db_id } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [patientData, setPatientData] = useState<PatientData | null>(null);
   const [patientContext, setPatientContext] = useState<PatientContext | undefined>();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -120,7 +135,6 @@ const PatientChat = () => {
       if (!patient) return;
       setPatientData(patient);
 
-      // Fetch active medications and upcoming appointments in parallel
       const [medsRes, apptsRes] = await Promise.all([
         externalSupabase
           .from('medications')
@@ -152,26 +166,105 @@ const PatientChat = () => {
         insurance: patient.insurance_provider,
       };
       setPatientContext(ctx);
-
-      // Welcome message
-      setMessages([{
-        id: generateId(),
-        role: 'assistant',
-        content: `Hello ${patient.full_name}! 👋 I'm your MedFlow AI health assistant. I can help you with appointments, medications, symptoms, or any health questions. How can I help you today?`,
-        timestamp: new Date(),
-      }]);
     };
 
     loadContext();
-  }, [user]);
+    if (user?.id) {
+      fetchConversations();
+      checkDatabaseHealth();
+    }
+  }, [user?.id]);
+
+  const checkDatabaseHealth = async () => {
+    try {
+      const { error } = await (externalSupabase as any).from('conversations').select('id').limit(1);
+      if (error) {
+        console.error("🚨 MEDFLOW DB ERROR: The 'conversations' table might be missing or unreachable. Details:", error);
+      } else {
+        console.log("✅ MEDFLOW DB: 'conversations' table is reachable.");
+      }
+    } catch (err) {
+      console.error("🚨 MEDFLOW DB FATAL: Failed to query conversations table.", err);
+    }
+  };
+
+  const fetchConversations = async () => {
+    if (!user?.id) {
+      console.log("⚠️ MEDFLOW: user.id is null, skipping conversations fetch.");
+      return;
+    }
+
+    console.log("🔍 MEDFLOW: Fetching conversations for user:", user.id);
+    const { data, error } = await (externalSupabase as any)
+      .from('conversations')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('agent_type', 'patient_agent')
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error("❌ MEDFLOW: Error fetching conversations:", error);
+      return;
+    }
+
+    console.log(`✅ MEDFLOW: Successfully fetched ${data?.length || 0} conversations.`);
+    if (data) setConversations(data);
+  };
+
+  const loadConversation = async (convId: string) => {
+    if (isTyping) return;
+    setCurrentConvId(convId);
+    setLoadingHistory(true);
+    setMessages([]);
+
+    try {
+      const { data } = await (externalSupabase as any)
+        .from('chat_history')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true });
+
+      if (data) {
+        const history: ChatMessage[] = [];
+        data.forEach((entry: any) => {
+          history.push({
+            id: `${entry.id}-user`,
+            role: 'user',
+            content: entry.message,
+            timestamp: new Date(entry.created_at)
+          });
+          if (entry.response) {
+            history.push({
+              id: `${entry.id}-ai`,
+              role: 'assistant',
+              content: entry.response,
+              timestamp: new Date(entry.created_at)
+            });
+          }
+        });
+        setMessages(history);
+      }
+    } catch (err) {
+      console.error('Error loading history:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const startNewChat = () => {
+    if (isTyping) return;
+    setCurrentConvId(null);
+    setMessages([]);
+    setSearchParams({});
+  };
 
   // Handle auto-prompt from URL
   useEffect(() => {
     const promptValue = searchParams.get('prompt');
-    if (promptValue === 'symptom-check' && patientContext && messages.length === 1) {
+    if (promptValue === 'symptom-check' && patientContext && messages.length === 0 && !loadingHistory) {
       sendMessage("I want to check some symptoms I've been experiencing. Can you help me understand what might be going on?");
     }
-  }, [searchParams, patientContext, messages.length]);
+  }, [searchParams, patientContext, messages.length, loadingHistory]);
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isTyping) return;
@@ -188,9 +281,8 @@ const PatientChat = () => {
     setIsTyping(true);
 
     try {
-      // Build conversation history (exclude welcome message for cleaner context)
       const history: ConversationMessage[] = messages
-        .slice(1) // skip welcome
+        .filter(m => m.role !== 'assistant' || !m.content.includes("Hello"))
         .map(m => ({ role: m.role, content: m.content }));
 
       const res = await callAgent({
@@ -198,8 +290,21 @@ const PatientChat = () => {
         message: text.trim(),
         patient_context: patientContext,
         conversation_history: history,
-        user_id: user.id,
+        user_id: db_id || undefined,
+        conversation_id: currentConvId || undefined,
       });
+
+      if (!currentConvId && res.conversation_id) {
+        console.log("🆕 MEDFLOW: New conversation created:", res.conversation_id);
+        setCurrentConvId(res.conversation_id);
+        setTimeout(() => fetchConversations(), 500);
+      }
+
+      if ((res as any).db_error) {
+        console.error("🚨 MEDFLOW BACKEND DB ERROR:", (res as any).db_error);
+      }
+
+      console.log("MedFlow AI Version:", (res as any).ai_version);
 
       setMessages(prev => [...prev, {
         id: generateId(),
@@ -221,106 +326,216 @@ const PatientChat = () => {
       setIsTyping(false);
       inputRef.current?.focus();
     }
-  }, [messages, isTyping, patientContext]);
+  }, [messages, isTyping, patientContext, db_id, currentConvId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sendMessage(input);
   };
 
-  return (
-    <div className="flex flex-col h-full" style={{ background: '#060810' }}>
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        {messages.map(msg => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            {msg.role === 'assistant' && (
-              <div className="flex items-end gap-3 max-w-[80%]">
-                <div className="shrink-0 w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center">
-                  <Brain size={16} className="text-teal-400" />
-                </div>
-                <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-[#0C0F1A] border border-[#1A1F35] text-sm text-gray-200">
-                  <TriageBadge level={msg.triage_level} />
-                  <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
-                    <ReactMarkdown>
-                      {msg.content}
-                    </ReactMarkdown>
-                  </div>
-                  {msg.suggested_action && (
-                    <div className="mt-3 pt-3 border-t border-[#1A1F35]">
-                      <button
-                        onClick={() => sendMessage(`I'd like to ${msg.suggested_action?.toLowerCase()} based on your suggestion.`)}
-                        className="text-xs font-medium text-teal-400 hover:text-teal-300 transition-colors flex items-center gap-1"
-                      >
-                        Action: {msg.suggested_action} →
-                      </button>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-gray-600 mt-2">
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-              </div>
-            )}
+  const filteredConversations = conversations.filter(c =>
+    c.title?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-            {msg.role === 'user' && (
-              <div className="max-w-[80%]">
-                <div className="rounded-2xl rounded-br-md px-4 py-3 bg-teal-600/20 border border-teal-500/20 text-sm text-gray-200">
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                  <p className="text-[10px] text-gray-500 mt-2 text-right">
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
+  return (
+    <div className="flex h-[calc(100vh-100px)] gap-6" style={{ background: '#060810' }}>
+      {/* Sidebar */}
+      <div className="w-80 flex flex-col bg-[#0C0F1A] border border-[#1A1F35] rounded-2xl overflow-hidden shadow-2xl">
+        <div className="p-4 border-b border-[#1A1F35] space-y-4">
+          <button
+            onClick={startNewChat}
+            disabled={isTyping}
+            className="w-full flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-teal-500/20 disabled:opacity-50"
+          >
+            <Plus size={18} />
+            <span>New Chat</span>
+          </button>
+
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-teal-400 transition-colors" size={16} />
+            <input
+              type="text"
+              placeholder="Search chats..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-[#1A1F35]/30 border border-[#1A1F35] rounded-xl pl-10 pr-4 py-2 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-teal-500/50 transition-all"
+            />
+          </div>
+        </div>
+
+        <ScrollArea className="flex-1 px-2 py-4">
+          <div className="space-y-1">
+            <div className="px-3 mb-2">
+              <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex items-center gap-2">
+                <History size={12} /> Recent Conversations
+              </span>
+            </div>
+            {filteredConversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => loadConversation(conv.id)}
+                className={cn(
+                  "w-full flex flex-col gap-1 px-3 py-3 rounded-xl transition-all text-left group",
+                  currentConvId === conv.id
+                    ? "bg-teal-500/10 border border-teal-500/20"
+                    : "hover:bg-white/5 border border-transparent"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <MessageSquare size={14} className={currentConvId === conv.id ? "text-teal-400" : "text-gray-500 group-hover:text-gray-400"} />
+                  <span className={cn(
+                    "text-xs font-semibold truncate",
+                    currentConvId === conv.id ? "text-white" : "text-gray-400 group-hover:text-gray-200"
+                  )}>
+                    {conv.title || "Untitled Chat"}
+                  </span>
                 </div>
+                <div className="flex items-center gap-1.5 ml-5">
+                  <Clock size={10} className="text-gray-600" />
+                  <span className="text-[9px] text-gray-600 font-medium">
+                    {format(new Date(conv.updated_at), 'MMM d, h:mm a')}
+                  </span>
+                </div>
+              </button>
+            ))}
+            {filteredConversations.length === 0 && (
+              <div className="px-3 py-8 text-center">
+                <p className="text-xs text-gray-600 italic">No conversations found</p>
               </div>
             )}
           </div>
-        ))}
-
-        {isTyping && <TypingIndicator />}
-        <div ref={bottomRef} />
+        </ScrollArea>
       </div>
 
-      {/* Quick action chips */}
-      <div className="px-4 pb-2 flex flex-wrap gap-2">
-        {quickChips.map(chip => (
-          <button
-            key={chip.label}
-            onClick={() => sendMessage(chip.message)}
-            disabled={isTyping}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#0C0F1A] border border-[#1A1F35] text-xs text-gray-400 hover:text-teal-400 hover:border-teal-500/30 transition-colors disabled:opacity-50"
-          >
-            <span>{chip.emoji}</span> {chip.label}
-          </button>
-        ))}
-      </div>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col bg-[#0C0F1A] border border-[#1A1F35] rounded-2xl overflow-hidden shadow-2xl relative">
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 scrollbar-hide">
+          {messages.length === 0 && !loadingHistory && !isTyping && (
+            <div className="h-full flex flex-col items-center justify-center text-center max-w-sm mx-auto space-y-6 animate-in fade-in duration-700">
+              <div className="w-20 h-20 rounded-3xl bg-teal-500/10 flex items-center justify-center border border-teal-500/20 shadow-2xl shadow-teal-500/5">
+                <Brain size={40} className="text-teal-400" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-2 font-display">MedFlow AI</h2>
+                <p className="text-gray-500 text-sm leading-relaxed">
+                  How can I help you with your health today?
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 w-full">
+                {quickChips.map(chip => (
+                  <button
+                    key={chip.label}
+                    onClick={() => sendMessage(chip.message)}
+                    className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-[#1A1F35]/30 border border-[#1A1F35] hover:border-teal-500/40 hover:bg-teal-500/5 transition-all group"
+                  >
+                    <span className="text-2xl group-hover:scale-110 transition-transform">{chip.emoji}</span>
+                    <span className="text-[10px] font-bold text-gray-400 group-hover:text-teal-400 uppercase tracking-widest">{chip.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-      {/* Input bar */}
-      <form
-        onSubmit={handleSubmit}
-        className="px-4 pb-4 pt-2"
-      >
-        <div className="flex items-center gap-2 rounded-xl bg-[#0C0F1A] border border-[#1A1F35] px-4 py-2 focus-within:border-teal-500/40 transition-colors">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            placeholder="Type your message..."
-            disabled={isTyping}
-            className="flex-1 bg-transparent text-sm text-white placeholder-gray-500 outline-none disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isTyping}
-            className="shrink-0 w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center text-teal-400 hover:bg-teal-500/30 transition-colors disabled:opacity-30"
-          >
-            <Send size={16} />
-          </button>
+          {loadingHistory && (
+            <div className="flex flex-col items-center justify-center h-full gap-4">
+              <div className="w-10 h-10 border-2 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
+              <p className="text-xs text-gray-500 animate-pulse font-medium tracking-widest uppercase">Fetching history...</p>
+            </div>
+          )}
+
+          {messages.map(msg => (
+            <div
+              key={msg.id}
+              className={cn("flex animate-in fade-in slide-in-from-bottom-2 duration-300", msg.role === 'user' ? 'justify-end' : 'justify-start')}
+            >
+              {msg.role === 'assistant' && (
+                <div className="flex items-start gap-4 max-w-[85%] md:max-w-[70%]">
+                  <div className="shrink-0 w-8 h-8 rounded-lg bg-teal-500/20 flex items-center justify-center border border-teal-500/20">
+                    <Brain size={18} className="text-teal-400" />
+                  </div>
+                  <div className="rounded-2xl rounded-tl-sm px-5 py-4 bg-[#1A1F35]/50 border border-[#1A1F35] text-sm text-gray-200 leading-relaxed shadow-lg shadow-black/20">
+                    <TriageBadge level={msg.triage_level} />
+                    <div className="prose prose-sm prose-invert max-w-none [&_p]:my-2 [&_ul]:my-2 [&_ol]:my-2 [&_li]:my-1">
+                      <ReactMarkdown>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                    {msg.suggested_action && (
+                      <div className="mt-4 pt-4 border-t border-[#1A1F35]">
+                        <button
+                          onClick={() => sendMessage(`I'd like to ${msg.suggested_action?.toLowerCase()} based on your suggestion.`)}
+                          className="text-[10px] font-black text-teal-400 hover:text-teal-300 uppercase tracking-widest flex items-center gap-2 group"
+                        >
+                          Action: {msg.suggested_action} <span className="group-hover:translate-x-1 transition-transform">→</span>
+                        </button>
+                      </div>
+                    )}
+                    <p className="text-[9px] text-gray-600 mt-3 font-medium uppercase tracking-tighter">
+                      {format(msg.timestamp, 'h:mm a')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {msg.role === 'user' && (
+                <div className="max-w-[85%] md:max-w-[70%]">
+                  <div className="rounded-2xl rounded-tr-sm px-5 py-4 bg-teal-600 text-white shadow-xl shadow-teal-900/10 border border-teal-500/20">
+                    <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                    <p className="text-[9px] text-teal-200/60 mt-3 font-medium text-right uppercase tracking-tighter">
+                      {format(msg.timestamp, 'h:mm a')}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isTyping && <TypingIndicator />}
+          <div ref={bottomRef} />
         </div>
-      </form>
+
+        <div className="p-6 bg-[#0C0F1A] border-t border-[#1A1F35] space-y-4">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {(messages.length > 0 || currentConvId) && quickChips.map(chip => (
+              <button
+                key={chip.label}
+                onClick={() => sendMessage(chip.message)}
+                disabled={isTyping}
+                className="whitespace-nowrap px-3 py-1.5 rounded-lg bg-[#1A1F35] text-[10px] text-gray-400 hover:text-white border border-transparent hover:border-teal-500/30 transition-all font-bold tracking-tight disabled:opacity-50"
+              >
+                {chip.label.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <form
+            onSubmit={handleSubmit}
+            className="flex items-center gap-3"
+          >
+            <div className="flex-1 flex items-center gap-3 rounded-xl bg-[#1A1F35]/30 border border-[#1A1F35] px-4 py-3 focus-within:border-teal-500/50 focus-within:ring-1 focus-within:ring-teal-500/20 transition-all shadow-inner">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder="Type a message..."
+                disabled={isTyping}
+                className="flex-1 bg-transparent text-sm text-white placeholder-gray-600 outline-none disabled:opacity-50"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!input.trim() || isTyping}
+              className="w-12 h-12 rounded-xl bg-teal-500 hover:bg-teal-600 text-white flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed group shadow-lg shadow-teal-500/20"
+            >
+              <Send size={20} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </button>
+          </form>
+          <p className="text-center text-[9px] text-gray-600 font-medium uppercase tracking-[0.2em]">
+            MedFlow AI can make mistakes. Check important clinical info.
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

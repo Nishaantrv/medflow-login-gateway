@@ -7,7 +7,8 @@ MedFlow AI is a state-of-the-art, AI-driven healthcare management platform desig
 ## 🌟 Key Highlights
 
 - **Multi-Agent Architecture**: Discrete AI agents tailored for clinical, administrative, and patient support roles.
-- **Real-Time Integration**: Built on Supabase for instant data synchronization across all user portals.
+- **Intelligent Chat Persistence**: ChatGPT-style sidebar with unified session tracking across all devices.
+- **Native AI Tooling**: Real-time integration with medical databases for medications, doctor availability, and scheduling.
 - **Premium Design Logic**: High-contrast dark medical theme with fluid animations and responsive layouts.
 - **Predictive Intelligence**: AI-powered features like Predictive Discharge and Automated Clinical Summaries.
 
@@ -25,14 +26,25 @@ The project was developed over a 5-day intensive build. You can explore the deta
 
 ---
 
-## 🤖 AI Agent Ecosystem
+## 🤖 AI Agent Ecosystem & Tooling
 
-MedFlow AI leverages a sophisticated `ai-agent` edge function (implemented with Claude 3.5 Sonnet) that powers specialized behavior for each role:
+MedFlow AI leverages a sophisticated `ai-agent` edge function (GPT-4o / GPT-4o-mini) with **Native Tool-Calling Capabilities**:
 
-- **Clinical Agent**: Assists doctors with SOAP note generation, patient briefings, and diagnostic suggestions.
-- **Patient Agent**: Provides 24/7 symptom triage, medication reminders, and general health question answering.
-- **Admin Agent**: Analyzes hospital data for predictive discharge trends and resource optimization.
-- **Family Agent**: Translates complex medical jargon into plain language for clear family updates.
+- **Real-Time Data Access**: Agents use tools like `get_medications` and `get_available_doctors` to fetch live database records.
+- **Action-Oriented Assistant**: The assistant can perform state-changing operations like `book_appointment` directly through natural language.
+- **Clinical Copilot**: Assists doctors with SOAP note generation, patient briefings, and diagnostic suggestions.
+- **24/7 Support**: Provides symptom triage and health record navigation for patients and family members.
+
+---
+
+## 📂 Intelligent Chat Persistence
+
+The Patient Portal now features a fully-persistent, ChatGPT-style conversation system:
+
+- **Unified Identity Sync**: Conversations are tied to your Auth ID, ensuring history is available across any device or session.
+- **Sidebar Organization**: A sleek left sidebar groups recent chats with auto-generated titles for easy navigation.
+- **State Preservation**: Switch between topics or start a "New Chat" without losing previous progress.
+- **Searchable History**: Integrated search to quickly find past medical guidance or appointment details.
 
 ---
 
@@ -68,7 +80,7 @@ MedFlow AI leverages a sophisticated `ai-agent` edge function (implemented with 
 - **Frontend**: `Vite`, `React 18`, `TypeScript`
 - **Styling**: `Tailwind CSS`, `Shadcn UI`, `Lucide Icons`, `Framer Motion`
 - **Backend**: `Supabase` (Auth, PostgreSQL, Realtime)
-- **AI Microservices**: `Supabase Edge Functions` + `Claude 3.5 Sonnet` / `GPT-4o`
+- **AI Microservices**: `Supabase Edge Functions` + `OpenAI Tool Calling`
 - **Data Fetching**: `React Query` (TanStack Query)
 - **Navigation**: `React Router v6`
 
@@ -97,5 +109,5 @@ MedFlow AI leverages a sophisticated `ai-agent` edge function (implemented with 
 
 ---
 
-## ✅ Final Project Status: 100% COMPLETED
-All milestones from the 5-day roadmap have been successfully implemented, verified, and polished. MedFlow AI is ready for demonstration.
+## ✅ Final Project Status: 100% COMPLETED (Extended v1.5)
+All milestones and the **advanced chat persistence/tooling layer** have been successfully implemented, verified, and pushed. MedFlow AI is a production-ready healthcare demonstration platform.

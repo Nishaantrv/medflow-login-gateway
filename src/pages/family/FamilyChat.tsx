@@ -5,6 +5,7 @@ import { callAgent } from '@/services/aiAgent';
 import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   id: string;
@@ -80,12 +81,12 @@ const FamilyChat = () => {
     }
   }, [messages, isTyping]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isTyping) return;
+  const handleSend = async (text: string = input) => {
+    if (!text.trim() || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: input,
+      text: text.trim(),
       sender: 'user',
       timestamp: new Date()
     };
@@ -109,6 +110,8 @@ const FamilyChat = () => {
         conversation_history: history,
         user_id: db_id || undefined,
       });
+
+      console.log("MedFlow AI (Family) Version:", (res as any).ai_version);
 
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
@@ -163,7 +166,13 @@ const FamilyChat = () => {
                 {msg.sender === 'ai' ? <Bot size={18} /> : <User size={18} />}
               </div>
               <div className={`max-w-[80%] md:max-w-[60%] p-4 rounded-2xl text-sm leading-relaxed ${msg.sender === 'ai' ? 'bg-[#1A1F35]/50 text-gray-200 border border-[#1A1F35]' : 'bg-teal-600 text-white shadow-lg shadow-teal-500/10'}`}>
-                {msg.text}
+                {msg.sender === 'ai' ? (
+                  <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
+                    <ReactMarkdown>{msg.text}</ReactMarkdown>
+                  </div>
+                ) : (
+                  msg.text
+                )}
                 <div className={`text-[10px] mt-2 ${msg.sender === 'ai' ? 'text-gray-500' : 'text-teal-200'}`}>
                   {format(msg.timestamp, 'h:mm a')}
                 </div>
@@ -186,9 +195,18 @@ const FamilyChat = () => {
         {/* Action Panel */}
         <div className="p-4 bg-[#0C0F1A] border-t border-[#1A1F35] space-y-4">
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {['Vitals Summary', 'Medication List', 'Doctor Notes'].map((label) => (
-              <button key={label} className="whitespace-nowrap px-3 py-1.5 rounded-lg bg-[#1A1F35] text-[10px] text-gray-400 hover:text-white border border-transparent hover:border-teal-500/30 transition-all font-bold tracking-tight">
-                {label.toUpperCase()}
+            {[
+              { label: 'Vitals Summary', message: 'Can you give me a summary of the latest vitals?' },
+              { label: 'Medication List', message: 'What medications is my family member currently taking?' },
+              { label: 'Book Appointment', message: 'I want to book an appointment for my family member.' },
+            ].map((chip) => (
+              <button
+                key={chip.label}
+                onClick={() => handleSend(chip.message)}
+                disabled={isTyping}
+                className="whitespace-nowrap px-3 py-1.5 rounded-lg bg-[#1A1F35] text-[10px] text-gray-400 hover:text-white border border-transparent hover:border-teal-500/30 transition-all font-bold tracking-tight disabled:opacity-50"
+              >
+                {chip.label.toUpperCase()}
               </button>
             ))}
           </div>
@@ -199,10 +217,11 @@ const FamilyChat = () => {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Type your question here..."
-              className="flex-1 bg-[#1A1F35]/30 border border-[#1A1F35] rounded-xl px-4 py-3 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/20 transition-all"
+              disabled={isTyping}
+              className="flex-1 bg-[#1A1F35]/30 border border-[#1A1F35] rounded-xl px-4 py-3 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-teal-500/50 focus:ring-1 focus:ring-teal-500/20 transition-all disabled:opacity-50"
             />
             <button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={!input.trim() || isTyping}
               className="w-12 h-12 rounded-xl bg-teal-500 hover:bg-teal-600 text-white flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed group shadow-lg shadow-teal-500/20"
             >

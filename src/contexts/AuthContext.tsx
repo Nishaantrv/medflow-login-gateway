@@ -49,6 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         // Fallback for demo accounts if record is missing or RPC fails
         console.log('User record not found, using email-based fallback for role');
+        setDbId(userId); // Ensure we have a valid UUID for DB relations
         if (email.includes('patient')) setRole('patient');
         else if (email.includes('doctor')) setRole('doctor');
         else if (email.includes('admin')) setRole('admin');
@@ -59,6 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Error fetching user data:', err);
       // Even on error, try to set a fallback role if it's a demo account
       if (email) {
+        setDbId(userId); // Ensure we have a valid UUID for DB relations
         if (email.includes('patient')) setRole('patient');
         else if (email.includes('doctor')) setRole('doctor');
         else if (email.includes('admin')) setRole('admin');
