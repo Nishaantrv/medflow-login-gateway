@@ -10,29 +10,39 @@ const corsHeaders = {
 type AgentType = "patient_agent" | "doctor_agent" | "hospital_agent" | "family_agent" | "data_agent";
 
 const systemPrompts: Record<AgentType, string> = {
-  patient_agent: `You are MedFlow AI, a compassionate and knowledgeable medical assistant for patients. You help patients understand their health conditions, medications, symptoms, and provide general health guidance. 
+  patient_agent: `You are MedFlow AI, a compassionate and knowledgeable medical assistant for patients. 
+
+RESPONSE FORMAT:
+You MUST respond with a JSON object in this exact format:
+{
+  "reply": "Your markdown-formatted response here",
+  "triage_level": "EMERGENCY" | "URGENT" | "ROUTINE" | null
+}
 
 SYMPTOM TRIAGE: 
-If a patient describes symptoms, you MUST conclude your analysis by identifying the urgency level using these tags:
-- [TRIAGE: EMERGENCY]: For life-threatening symptoms (chest pain, severe bleeding, difficulty breathing). Advise immediate ER or 911.
-- [TRIAGE: URGENT]: For symptoms needing care within 24-48 hours (fever, persistent pain, infections). Advise contacting their doctor or urgent care.
-- [TRIAGE: ROUTINE]: For minor issues or general health questions (mild cold, minor aches, follow-ups). 
+If a patient describes symptoms, identify the urgency level:
+- EMERGENCY: For life-threatening symptoms. Advise immediate ER or 911.
+- URGENT: For symptoms needing care within 24-48 hours.
+- ROUTINE: For minor issues or general health questions.
 
-Always remind patients to consult their doctor for serious concerns. Be empathetic, clear, and use simple language. If given patient context (allergies, medications, conditions), tailor your responses accordingly.`,
+Always remind patients to consult their doctor for serious concerns. If given patient context (allergies, medications, conditions), tailor your responses accordingly.`,
 
-  doctor_agent: `You are MedFlow AI, a clinical decision support assistant for physicians. You help with differential diagnoses, treatment protocols, drug interactions, and evidence-based medicine. 
+  doctor_agent: `You are MedFlow AI, a clinical decision support assistant for physicians.
 
-CLINICAL TOOLS:
-- SOAP GENERATION: If provided with raw consultation notes, structure them into Objective, Subjective, Assessment, and Plan fields.
-- PATIENT BRIEFING: If provided with a patient's medical history (meds, allergies, labs), generate a concise 2-paragraph briefing summarizing their status.
+RESPONSE FORMAT:
+You MUST respond with a JSON object in this exact format:
+{
+  "reply": "Your professional clinical summary or response here",
+  "action_items": ["item 1", "item 2"] | null
+}
 
-Provide concise, medically accurate responses. Reference clinical guidelines when applicable. Always present information professionally.`,
+Provide concise, medically accurate responses. Reference clinical guidelines when applicable.`,
 
-  hospital_agent: `You are MedFlow AI, a hospital operations assistant for administrators. You help with bed management optimization, staff scheduling, resource allocation, billing inquiries, and operational efficiency. Provide data-driven recommendations and actionable insights. Be concise and focused on operational metrics.`,
+  hospital_agent: `You are MedFlow AI, a hospital operations assistant. Respond with a JSON object: {"reply": "..."}. Provide data-driven recommendations and actionable insights.`,
 
-  family_agent: `You are MedFlow AI, a caring health liaison for family members of patients. You help family members understand their loved one's health status, medications, treatment plans, and care instructions in simple terms. Be compassionate and reassuring while providing accurate information. Encourage them to speak with the care team for detailed medical questions.`,
+  family_agent: `You are MedFlow AI, a caring health liaison for family members. Respond with a JSON object: {"reply": "..."}. Translate medical jargon into simple terms.`,
 
-  data_agent: `You are MedFlow AI, a medical data analysis assistant. You help analyze patient data, identify trends, generate summaries, and provide insights from medical records. Present data clearly and highlight important findings. Focus on actionable insights while maintaining patient privacy.`,
+  data_agent: `You are MedFlow AI, a medical data analysis assistant. Respond with a JSON object: {"reply": "..."}. Focus on actionable insights while maintaining patient privacy.`,
 };
 
 serve(async (req) => {
@@ -43,7 +53,6 @@ serve(async (req) => {
   try {
     const { agent_type, message, user_message, patient_context, conversation_history, user_id } = await req.json();
 
-    // Support both 'message' and 'user_message' as requested
     const finalUserMessage = message || user_message;
 
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -60,7 +69,6 @@ serve(async (req) => {
 
     const systemContent = systemPrompts[agent_type as AgentType];
 
-    // Prepare messages for OpenAI API
     const messages = [
       { role: "system", content: systemContent },
       ...(conversation_history || []),
@@ -79,6 +87,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages,
+        response_format: { type: "json_object" },
         temperature: 0.7,
         max_tokens: 1024,
       }),
@@ -93,8 +102,18 @@ serve(async (req) => {
       );
     }
 
-    const data = await response.json();
-    const reply = data.choices[0].message.content;
+    const openaiData = await response.json();
+    const rawContent = openaiData.choices[0].message.content;
+
+    let parsedContent;
+    try {
+      parsedContent = JSON.parse(rawContent);
+    } catch (e) {
+      console.error("Failed to parse AI JSON response:", rawContent);
+      throw new Error("Invalid AI response format");
+    }
+
+    const reply = parsedContent.reply;
 
     // STORE IN DATABASE
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -104,7 +123,7 @@ serve(async (req) => {
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
       const { error: dbError } = await supabase.from("chat_history").insert({
-        user_id: user_id || null, // Optional user association
+        user_id: user_id || null,
         agent_type: agent_type,
         message: finalUserMessage,
         response: reply,
@@ -115,7 +134,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ reply }),
+      JSON.stringify(parsedContent),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
