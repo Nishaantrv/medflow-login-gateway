@@ -95,17 +95,12 @@ The Patient Portal now features a fully-persistent, ChatGPT-style conversation s
    cd medflow-login-gateway
    npm install
    ```
-3. **Environment Setup**:
-   - Create a `.env` file in the root directory.
-   - Add your credentials:
-     ```env
-     VITE_SUPABASE_URL=your_supabase_url
-     VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-     ```
-4. **Run the App**:
+3. **Run the App**:
    ```bash
    npm run dev
    ```
+   > [!NOTE]
+   > The Supabase connection is **pre-configured** for this project. No manual `.env` setup is required to run the application immediately.
 
 ---
 
