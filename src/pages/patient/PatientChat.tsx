@@ -12,6 +12,8 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  triage_level?: "EMERGENCY" | "URGENT" | "ROUTINE" | null;
+  suggested_action?: string | null;
 }
 
 interface PatientData {
@@ -63,22 +65,22 @@ const TypingIndicator = () => (
   </div>
 );
 
-const TriageBadge = ({ content }: { content: string }) => {
-  if (content.includes('[TRIAGE: EMERGENCY]')) {
+const TriageBadge = ({ level }: { level?: string | null }) => {
+  if (level === 'EMERGENCY') {
     return (
       <Badge className="mb-2 bg-red-500/20 text-red-500 border-red-500/30 flex items-center gap-1.5 w-fit">
         <AlertTriangle size={12} /> Emergency: Seek Immediate Care
       </Badge>
     );
   }
-  if (content.includes('[TRIAGE: URGENT]')) {
+  if (level === 'URGENT') {
     return (
       <Badge className="mb-2 bg-orange-500/20 text-orange-500 border-orange-500/30 flex items-center gap-1.5 w-fit">
         <AlertTriangle size={12} /> Urgent: Contact Doctor Soon
       </Badge>
     );
   }
-  if (content.includes('[TRIAGE: ROUTINE]')) {
+  if (level === 'ROUTINE') {
     return (
       <Badge className="mb-2 bg-teal-500/20 text-teal-400 border-teal-500/30 flex items-center gap-1.5 w-fit">
         Routine: Monitor & Schedule Follow-up
@@ -203,6 +205,8 @@ const PatientChat = () => {
         id: generateId(),
         role: 'assistant',
         content: res.reply,
+        triage_level: res.triage_level,
+        suggested_action: res.suggested_action,
         timestamp: new Date(),
       }]);
     } catch (err) {
@@ -239,12 +243,22 @@ const PatientChat = () => {
                   <Brain size={16} className="text-teal-400" />
                 </div>
                 <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-[#0C0F1A] border border-[#1A1F35] text-sm text-gray-200">
-                  <TriageBadge content={msg.content} />
+                  <TriageBadge level={msg.triage_level} />
                   <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
                     <ReactMarkdown>
-                      {msg.content.replace(/\[TRIAGE: (EMERGENCY|URGENT|ROUTINE)\]/g, '')}
+                      {msg.content}
                     </ReactMarkdown>
                   </div>
+                  {msg.suggested_action && (
+                    <div className="mt-3 pt-3 border-t border-[#1A1F35]">
+                      <button
+                        onClick={() => sendMessage(`I'd like to ${msg.suggested_action?.toLowerCase()} based on your suggestion.`)}
+                        className="text-xs font-medium text-teal-400 hover:text-teal-300 transition-colors flex items-center gap-1"
+                      >
+                        Action: {msg.suggested_action} →
+                      </button>
+                    </div>
+                  )}
                   <p className="text-[10px] text-gray-600 mt-2">
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>

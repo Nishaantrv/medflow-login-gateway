@@ -20,6 +20,7 @@ export interface ConversationMessage {
 export interface AgentResponse {
   reply: string;
   triage_level?: "EMERGENCY" | "URGENT" | "ROUTINE" | null;
+  suggested_action?: string | null;
   action_items?: string[] | null;
   usage?: {
     prompt_tokens: number;
