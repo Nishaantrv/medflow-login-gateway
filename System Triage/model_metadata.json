@@ -1,0 +1,311 @@
+{
+  "model_type": "GradientBoosting",
+  "triage_levels": [
+    "EMERGENCY",
+    "URGENT",
+    "SEMI-URGENT",
+    "NON-URGENT",
+    "SELF-CARE"
+  ],
+  "feature_columns": [
+    "chest_pain",
+    "shortness_of_breath",
+    "severe_bleeding",
+    "unconsciousness",
+    "seizure",
+    "severe_allergic_reaction",
+    "stroke_symptoms",
+    "heart_palpitations",
+    "high_fever",
+    "moderate_fever",
+    "low_fever",
+    "severe_headache",
+    "mild_headache",
+    "abdominal_pain_severe",
+    "abdominal_pain_mild",
+    "nausea",
+    "vomiting",
+    "persistent_vomiting",
+    "diarrhea",
+    "dizziness",
+    "fainting",
+    "cough",
+    "persistent_cough",
+    "wheezing",
+    "sore_throat",
+    "runny_nose",
+    "body_aches",
+    "fatigue",
+    "chronic_fatigue",
+    "joint_pain",
+    "back_pain",
+    "severe_back_pain",
+    "skin_rash",
+    "severe_rash",
+    "minor_cut",
+    "sprain",
+    "fracture_suspected",
+    "burn_minor",
+    "burn_severe",
+    "eye_pain",
+    "vision_changes",
+    "ear_pain",
+    "numbness_tingling",
+    "confusion",
+    "difficulty_swallowing",
+    "blood_in_urine",
+    "blood_in_stool",
+    "swollen_limb",
+    "insomnia",
+    "anxiety",
+    "panic_attack",
+    "age",
+    "sex",
+    "heart_rate",
+    "systolic_bp",
+    "temperature",
+    "spo2",
+    "respiratory_rate",
+    "symptom_duration_hours",
+    "pain_score",
+    "symptom_count",
+    "red_flag_count",
+    "severity_score",
+    "max_symptom_severity",
+    "hr_deviation",
+    "bp_risk",
+    "temp_deviation",
+    "spo2_risk",
+    "rr_deviation",
+    "vitals_risk_score",
+    "age_risk",
+    "severity_x_vitals",
+    "redflag_x_age_risk",
+    "pain_x_duration",
+    "comorbidity_risk",
+    "has_comorbidity",
+    "log_duration"
+  ],
+  "symptom_registry": {
+    "chest_pain": {
+      "severity": 9,
+      "is_red_flag": true
+    },
+    "shortness_of_breath": {
+      "severity": 8,
+      "is_red_flag": true
+    },
+    "severe_bleeding": {
+      "severity": 9,
+      "is_red_flag": true
+    },
+    "unconsciousness": {
+      "severity": 10,
+      "is_red_flag": true
+    },
+    "seizure": {
+      "severity": 9,
+      "is_red_flag": true
+    },
+    "severe_allergic_reaction": {
+      "severity": 9,
+      "is_red_flag": true
+    },
+    "stroke_symptoms": {
+      "severity": 10,
+      "is_red_flag": true
+    },
+    "heart_palpitations": {
+      "severity": 7,
+      "is_red_flag": false
+    },
+    "high_fever": {
+      "severity": 7,
+      "is_red_flag": false
+    },
+    "moderate_fever": {
+      "severity": 4,
+      "is_red_flag": false
+    },
+    "low_fever": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "severe_headache": {
+      "severity": 6,
+      "is_red_flag": false
+    },
+    "mild_headache": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "abdominal_pain_severe": {
+      "severity": 7,
+      "is_red_flag": false
+    },
+    "abdominal_pain_mild": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "nausea": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "vomiting": {
+      "severity": 4,
+      "is_red_flag": false
+    },
+    "persistent_vomiting": {
+      "severity": 6,
+      "is_red_flag": false
+    },
+    "diarrhea": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "dizziness": {
+      "severity": 4,
+      "is_red_flag": false
+    },
+    "fainting": {
+      "severity": 7,
+      "is_red_flag": true
+    },
+    "cough": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "persistent_cough": {
+      "severity": 4,
+      "is_red_flag": false
+    },
+    "wheezing": {
+      "severity": 5,
+      "is_red_flag": false
+    },
+    "sore_throat": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "runny_nose": {
+      "severity": 1,
+      "is_red_flag": false
+    },
+    "body_aches": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "fatigue": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "chronic_fatigue": {
+      "severity": 4,
+      "is_red_flag": false
+    },
+    "joint_pain": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "back_pain": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "severe_back_pain": {
+      "severity": 6,
+      "is_red_flag": false
+    },
+    "skin_rash": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "severe_rash": {
+      "severity": 5,
+      "is_red_flag": false
+    },
+    "minor_cut": {
+      "severity": 1,
+      "is_red_flag": false
+    },
+    "sprain": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "fracture_suspected": {
+      "severity": 6,
+      "is_red_flag": false
+    },
+    "burn_minor": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "burn_severe": {
+      "severity": 8,
+      "is_red_flag": true
+    },
+    "eye_pain": {
+      "severity": 4,
+      "is_red_flag": false
+    },
+    "vision_changes": {
+      "severity": 7,
+      "is_red_flag": true
+    },
+    "ear_pain": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "numbness_tingling": {
+      "severity": 5,
+      "is_red_flag": false
+    },
+    "confusion": {
+      "severity": 8,
+      "is_red_flag": true
+    },
+    "difficulty_swallowing": {
+      "severity": 5,
+      "is_red_flag": false
+    },
+    "blood_in_urine": {
+      "severity": 6,
+      "is_red_flag": false
+    },
+    "blood_in_stool": {
+      "severity": 6,
+      "is_red_flag": false
+    },
+    "swollen_limb": {
+      "severity": 4,
+      "is_red_flag": false
+    },
+    "insomnia": {
+      "severity": 2,
+      "is_red_flag": false
+    },
+    "anxiety": {
+      "severity": 3,
+      "is_red_flag": false
+    },
+    "panic_attack": {
+      "severity": 5,
+      "is_red_flag": false
+    }
+  },
+  "metrics": {
+    "accuracy": 0.995,
+    "f1_weighted": 0.9950059895795748,
+    "f1_macro": 0.995219882517644,
+    "precision_weighted": 0.9950250532742037,
+    "recall_weighted": 0.995,
+    "cv_f1_mean": 0.9906420463497451,
+    "cv_f1_std": 0.0011454158542345283,
+    "f1_per_class": {
+      "EMERGENCY": 1.0,
+      "URGENT": 1.0,
+      "SEMI-URGENT": 1.0,
+      "NON-URGENT": 0.9916434540389972,
+      "SELF-CARE": 0.9844559585492227
+    }
+  }
+}

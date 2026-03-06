@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Medical NER — scispaCy Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface-2: #1a2236;
+    --border: #1e2d4a;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --accent: #38bdf8;
+    --disease: #f472b6;
+    --disease-bg: rgba(244,114,182,0.12);
+    --disease-border: rgba(244,114,182,0.35);
+    --medication: #34d399;
+    --medication-bg: rgba(52,211,153,0.12);
+    --medication-border: rgba(52,211,153,0.35);
+    --procedure: #a78bfa;
+    --procedure-bg: rgba(167,139,250,0.12);
+    --procedure-border: rgba(167,139,250,0.35);
+    --anatomy: #fb923c;
+    --anatomy-bg: rgba(251,146,60,0.12);
+    --anatomy-border: rgba(251,146,60,0.35);
+    --lab: #22d3ee;
+    --lab-bg: rgba(34,211,238,0.12);
+    --lab-border: rgba(34,211,238,0.35);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    z-index: 9999;
+  }
+
+  .app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .header-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #1e3a5f, #0f2942);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+  }
+
+  .header h1 {
+    font-family: 'Source Serif 4', serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header-sub {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 2rem;
+    padding-left: 64px;
+  }
+
+  .header-sub span {
+    color: var(--accent);
+    opacity: 0.8;
+  }
+
+  /* Pipeline viz */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 2rem;
+    overflow-x: auto;
+    padding: 0.5rem 0;
+  }
+
+  .pipe-step {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    white-space: nowrap;
+  }
+
+  .pipe-node {
+    padding: 0.4rem 0.85rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    transition: all 0.3s;
+  }
+
+  .pipe-node.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 12px rgba(56,189,248,0.15);
+  }
+
+  .pipe-arrow {
+    color: var(--border);
+    font-size: 0.7rem;
+    padding: 0 0.3rem;
+  }
+
+  /* Main grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+
+  .panel-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+  }
+
+  .panel-badge {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 20px;
+    background: rgba(56,189,248,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(56,189,248,0.2);
+  }
+
+  /* Input */
+  .input-area {
+    padding: 1rem;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus {
+    border-color: var(--accent);
+  }
+
+  textarea::placeholder {
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 1rem 1rem;
+  }
+
+  .btn-run {
+    padding: 0.55rem 1.5rem;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    border: 1px solid #3b82f6;
+    border-radius: 8px;
+    color: white;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-run:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(37,99,235,0.4);
+  }
+
+  .btn-run:active { transform: translateY(0); }
+
+  .btn-run.processing {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  .btn-sample {
+    padding: 0.55rem 1rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-sample:hover {
+    border-color: var(--text-dim);
+    color: var(--text);
+  }
+
+  /* Annotated output */
+  .output-area {
+    padding: 1rem;
+    min-height: 220px;
+    font-size: 0.82rem;
+    line-height: 2;
+  }
+
+  .output-area .placeholder {
+    color: var(--text-dim);
+    opacity: 0.4;
+    font-style: italic;
+    font-size: 0.78rem;
+  }
+
+  .entity-tag {
+    display: inline;
+    padding: 0.15rem 0.1rem;
+    border-radius: 4px;
+    border-bottom: 2px solid;
+    position: relative;
+    cursor: default;
+    transition: all 0.15s;
+  }
+
+  .entity-tag:hover {
+    filter: brightness(1.3);
+  }
+
+  .entity-tag .label {
+    font-size: 0.55rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    vertical-align: super;
+    margin-left: 2px;
+    opacity: 0.9;
+  }
+
+  .entity-tag.DISEASE { background: var(--disease-bg); border-color: var(--disease-border); }
+  .entity-tag.DISEASE .label { color: var(--disease); }
+  .entity-tag.MEDICATION { background: var(--medication-bg); border-color: var(--medication-border); }
+  .entity-tag.MEDICATION .label { color: var(--medication); }
+  .entity-tag.PROCEDURE { background: var(--procedure-bg); border-color: var(--procedure-border); }
+  .entity-tag.PROCEDURE .label { color: var(--procedure); }
+  .entity-tag.ANATOMY { background: var(--anatomy-bg); border-color: var(--anatomy-border); }
+  .entity-tag.ANATOMY .label { color: var(--anatomy); }
+  .entity-tag.LAB_TEST { background: var(--lab-bg); border-color: var(--lab-border); }
+  .entity-tag.LAB_TEST .label { color: var(--lab); }
+
+  /* Tooltip */
+  .tooltip {
+    display: none;
+    position: fixed;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.72rem;
+    z-index: 10000;
+    max-width: 320px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    pointer-events: none;
+  }
+
+  .tooltip.visible { display: block; }
+
+  .tooltip-title {
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+  }
+
+  .tooltip-cui {
+    color: var(--accent);
+    font-size: 0.65rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .tooltip-def {
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* Bottom panels */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 768px) {
+    .bottom-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Entity table */
+  .entity-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .entity-table th {
+    text-align: left;
+    padding: 0.5rem 1rem;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+
+  .entity-table td {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    border-bottom: 1px solid rgba(30,45,74,0.4);
+  }
+
+  .entity-table tr:last-child td { border-bottom: none; }
+
+  .type-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+  }
+
+  .type-dot.DISEASE { background: var(--disease); }
+  .type-dot.MEDICATION { background: var(--medication); }
+  .type-dot.PROCEDURE { background: var(--procedure); }
+  .type-dot.ANATOMY { background: var(--anatomy); }
+  .type-dot.LAB_TEST { background: var(--lab); }
+
+  .conf-bar {
+    width: 60px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+  }
+
+  .conf-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  /* Stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .stat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.4rem;
+    font-weight: 600;
+    font-family: 'Source Serif 4', serif;
+  }
+
+  .stat-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-top: 0.2rem;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+
+  /* Processing animation */
+  @keyframes pulse-line {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  .processing-indicator {
+    display: none;
+    padding: 2rem 1rem;
+    text-align: center;
+  }
+
+  .processing-indicator.active { display: block; }
+
+  .proc-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .proc-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse-line 1s ease-in-out infinite;
+  }
+
+  .proc-dot:nth-child(2) { animation-delay: 0.15s; }
+  .proc-dot:nth-child(3) { animation-delay: 0.3s; }
+
+  .proc-text {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+  }
+
+  /* Fade in animation */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.4s ease forwards;
+  }
+
+  .empty-state {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    opacity: 0.5;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-icon">🧬</div>
+    <h1>Medical NER</h1>
+  </div>
+  <div class="header-sub">
+    scispaCy <span>·</span> en_core_sci_lg <span>·</span> UMLS Entity Linker <span>·</span> Biomedical NLP Pipeline
+  </div>
+
+  <!-- Pipeline -->
+  <div class="pipeline" id="pipeline">
+    <div class="pipe-step">
+      <div class="pipe-node" data-step="0">Tokenizer</div>
+      <div class="pipe-arrow">→</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-node" data-step="1">Tagger</div>
+      <div class="pipe-arrow">→</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-node" data-step="2">Parser</div>
+      <div class="pipe-arrow">→</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-node" data-step="3">NER</div>
+      <div class="pipe-arrow">→</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-node" data-step="4">Entity Linker</div>
+      <div class="pipe-arrow">→</div>
+    </div>
+    <div class="pipe-step">
+      <div class="pipe-node" data-step="5">Output</div>
+    </div>
+  </div>
+
+  <!-- Main Panels -->
+  <div class="main-grid">
+    <!-- Input Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Clinical Input</span>
+        <span class="panel-badge">Free Text</span>
+      </div>
+      <div class="input-area">
+        <textarea id="inputText" placeholder="Paste clinical notes, discharge summaries, or medical text here..."></textarea>
+      </div>
+      <div class="controls">
+        <button class="btn-run" id="btnRun" onclick="runNER()">▶ Extract Entities</button>
+        <button class="btn-sample" onclick="loadSample(0)">Sample 1</button>
+        <button class="btn-sample" onclick="loadSample(1)">Sample 2</button>
+        <button class="btn-sample" onclick="loadSample(2)">Sample 3</button>
+      </div>
+    </div>
+
+    <!-- Output Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Annotated Output</span>
+        <span class="panel-badge" id="entityCount">0 entities</span>
+      </div>
+      <div class="output-area" id="outputArea">
+        <span class="placeholder">Entities will be highlighted here after extraction...</span>
+      </div>
+      <div class="processing-indicator" id="processing">
+        <div class="proc-dots">
+          <div class="proc-dot"></div>
+          <div class="proc-dot"></div>
+          <div class="proc-dot"></div>
+        </div>
+        <div class="proc-text" id="procText">Running tokenizer...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Panels -->
+  <div class="bottom-grid">
+    <!-- Entity Table -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Extracted Entities</span>
+        <span class="panel-badge" id="uniqueCount">0 unique</span>
+      </div>
+      <div id="entityTableWrap">
+        <div class="empty-state">No entities extracted yet</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Pipeline Stats</span>
+        <span class="panel-badge">en_core_sci_lg</span>
+      </div>
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <div class="stat-value" id="statTokens">—</div>
+          <div class="stat-label">Tokens</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statEntities">—</div>
+          <div class="stat-label">Entities</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statLinked">—</div>
+          <div class="stat-label">UMLS Linked</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statTime">—</div>
+          <div class="stat-label">Time (ms)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statSents">—</div>
+          <div class="stat-label">Sentences</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="statAvgConf">—</div>
+          <div class="stat-label">Avg Conf.</div>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><span class="type-dot DISEASE"></span>Disease</div>
+        <div class="legend-item"><span class="type-dot MEDICATION"></span>Medication</div>
+        <div class="legend-item"><span class="type-dot PROCEDURE"></span>Procedure</div>
+        <div class="legend-item"><span class="type-dot ANATOMY"></span>Anatomy</div>
+        <div class="legend-item"><span class="type-dot LAB_TEST"></span>Lab/Test</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="ttTitle"></div>
+  <div class="tooltip-cui" id="ttCui"></div>
+  <div class="tooltip-def" id="ttDef"></div>
+</div>
+
+<script>
+// ============================================================
+// MEDICAL NER ENGINE — Pattern-based biomedical entity extractor
+// Simulates scispaCy's en_core_sci_lg + UMLS linker behavior
+// ============================================================
+
+const UMLS_KB = {
+  // DISEASES
+  "type 2 diabetes mellitus": { cui: "C0011860", def: "A subclass of diabetes mellitus that is not insulin-responsive or insulin-dependent, characterized by insulin resistance and often associated with obesity.", type: "DISEASE", conf: 0.96 },
+  "type 2 diabetes": { cui: "C0011860", def: "A subclass of diabetes mellitus that is not insulin-responsive or insulin-dependent.", type: "DISEASE", conf: 0.95 },
+  "diabetes mellitus": { cui: "C0011849", def: "A heterogeneous group of disorders characterized by hyperglycemia and glucose intolerance.", type: "DISEASE", conf: 0.94 },
+  "diabetes": { cui: "C0011849", def: "A metabolic disorder characterized by high blood sugar levels over a prolonged period.", type: "DISEASE", conf: 0.88 },
+  "hypertension": { cui: "C0020538", def: "Persistently high systemic arterial blood pressure, generally considered to be ≥140/90 mmHg.", type: "DISEASE", conf: 0.97 },
+  "essential hypertension": { cui: "C0085580", def: "Hypertension with no identifiable secondary cause; the most common type of high blood pressure.", type: "DISEASE", conf: 0.95 },
+  "congestive heart failure": { cui: "C0018802", def: "Heart failure accompanied by systemic congestion due to the heart's inability to pump blood efficiently.", type: "DISEASE", conf: 0.97 },
+  "heart failure": { cui: "C0018801", def: "A condition in which the heart cannot pump enough blood to meet the body's needs.", type: "DISEASE", conf: 0.95 },
+  "atrial fibrillation": { cui: "C0004238", def: "Abnormal cardiac rhythm with rapid, irregular beating of the atrial chambers of the heart.", type: "DISEASE", conf: 0.96 },
+  "coronary artery disease": { cui: "C1956346", def: "Narrowing of the coronary arteries due to atherosclerosis, reducing blood flow to the heart.", type: "DISEASE", conf: 0.95 },
+  "chronic kidney disease": { cui: "C1561643", def: "Progressive loss of kidney function over months or years, classified into five stages.", type: "DISEASE", conf: 0.96 },
+  "chronic obstructive pulmonary disease": { cui: "C0024117", def: "A group of lung conditions causing breathing difficulties, including emphysema and chronic bronchitis.", type: "DISEASE", conf: 0.97 },
+  "copd": { cui: "C0024117", def: "Chronic obstructive pulmonary disease — progressive inflammatory lung disease.", type: "DISEASE", conf: 0.93 },
+  "pneumonia": { cui: "C0032285", def: "An inflammatory condition of the lung primarily affecting the alveoli.", type: "DISEASE", conf: 0.96 },
+  "community-acquired pneumonia": { cui: "C0694549", def: "Pneumonia contracted outside of hospitals or healthcare facilities.", type: "DISEASE", conf: 0.94 },
+  "pulmonary embolism": { cui: "C0034065", def: "Blockage of the pulmonary artery by a blood clot, fat, air, or tumor.", type: "DISEASE", conf: 0.97 },
+  "deep vein thrombosis": { cui: "C0149871", def: "Formation of a blood clot in a deep vein, usually in the legs.", type: "DISEASE", conf: 0.95 },
+  "sepsis": { cui: "C0243026", def: "Life-threatening organ dysfunction caused by a dysregulated host response to infection.", type: "DISEASE", conf: 0.96 },
+  "acute myocardial infarction": { cui: "C0155626", def: "Sudden ischemic necrosis of myocardial tissue due to coronary artery occlusion.", type: "DISEASE", conf: 0.97 },
+  "myocardial infarction": { cui: "C0027051", def: "Necrosis of the myocardium caused by an interruption of the blood supply.", type: "DISEASE", conf: 0.96 },
+  "stroke": { cui: "C0038454", def: "Sudden loss of neurological function due to cerebrovascular ischemia or hemorrhage.", type: "DISEASE", conf: 0.93 },
+  "ischemic stroke": { cui: "C0948008", def: "Stroke caused by a blockage in an artery supplying blood to the brain.", type: "DISEASE", conf: 0.95 },
+  "hyperlipidemia": { cui: "C0020473", def: "Abnormally elevated levels of lipids or lipoproteins in the blood.", type: "DISEASE", conf: 0.94 },
+  "dyslipidemia": { cui: "C0242339", def: "Abnormal amount of lipids in the blood.", type: "DISEASE", conf: 0.93 },
+  "asthma": { cui: "C0004096", def: "A chronic respiratory disease characterized by airway inflammation and hyperresponsiveness.", type: "DISEASE", conf: 0.95 },
+  "anemia": { cui: "C0002871", def: "A condition in which the blood doesn't have enough healthy red blood cells.", type: "DISEASE", conf: 0.94 },
+  "iron deficiency anemia": { cui: "C0162316", def: "Anemia resulting from insufficient iron for hemoglobin synthesis.", type: "DISEASE", conf: 0.95 },
+  "obesity": { cui: "C0028754", def: "A condition of excess body weight, with BMI ≥30.", type: "DISEASE", conf: 0.92 },
+  "hypothyroidism": { cui: "C0020676", def: "Deficiency of thyroid hormone production by the thyroid gland.", type: "DISEASE", conf: 0.95 },
+  "hyperthyroidism": { cui: "C0020550", def: "Excessive production of thyroid hormones by the thyroid gland.", type: "DISEASE", conf: 0.94 },
+  "gastroesophageal reflux disease": { cui: "C0017168", def: "Chronic digestive disease where stomach acid flows back into the esophagus.", type: "DISEASE", conf: 0.95 },
+  "gerd": { cui: "C0017168", def: "Gastroesophageal reflux disease — chronic acid reflux.", type: "DISEASE", conf: 0.91 },
+  "cirrhosis": { cui: "C0023890", def: "Chronic liver disease characterized by replacement of liver tissue with fibrotic scar tissue.", type: "DISEASE", conf: 0.95 },
+  "hepatitis c": { cui: "C0019196", def: "Liver inflammation caused by the hepatitis C virus.", type: "DISEASE", conf: 0.94 },
+  "hepatitis b": { cui: "C0019163", def: "Liver inflammation caused by the hepatitis B virus.", type: "DISEASE", conf: 0.94 },
+  "alzheimer's disease": { cui: "C0002395", def: "Progressive neurodegenerative disease causing memory loss and cognitive decline.", type: "DISEASE", conf: 0.96 },
+  "parkinson's disease": { cui: "C0030567", def: "Neurodegenerative disorder affecting movement, causing tremor and rigidity.", type: "DISEASE", conf: 0.96 },
+  "rheumatoid arthritis": { cui: "C0003873", def: "Chronic autoimmune disorder primarily affecting joints.", type: "DISEASE", conf: 0.95 },
+  "osteoarthritis": { cui: "C0029408", def: "Degenerative joint disease characterized by cartilage breakdown.", type: "DISEASE", conf: 0.94 },
+  "peripheral neuropathy": { cui: "C0031117", def: "Damage to peripheral nerves causing weakness, numbness and pain.", type: "DISEASE", conf: 0.93 },
+  "cellulitis": { cui: "C0007642", def: "Bacterial skin infection causing redness, swelling, and pain.", type: "DISEASE", conf: 0.94 },
+  "urinary tract infection": { cui: "C0042029", def: "Infection in any part of the urinary system.", type: "DISEASE", conf: 0.95 },
+  "pancreatitis": { cui: "C0030305", def: "Inflammation of the pancreas.", type: "DISEASE", conf: 0.95 },
+  "acute pancreatitis": { cui: "C0001339", def: "Sudden inflammation of the pancreas.", type: "DISEASE", conf: 0.96 },
+  "pleural effusion": { cui: "C0032227", def: "Excess fluid between the layers of the pleura outside the lungs.", type: "DISEASE", conf: 0.94 },
+  "edema": { cui: "C0013604", def: "Swelling caused by excess fluid trapped in body tissues.", type: "DISEASE", conf: 0.90 },
+  "peripheral edema": { cui: "C0085649", def: "Swelling of the lower extremities due to fluid accumulation.", type: "DISEASE", conf: 0.92 },
+  "hyperglycemia": { cui: "C0020456", def: "Abnormally high blood glucose concentration.", type: "DISEASE", conf: 0.93 },
+  "hypoglycemia": { cui: "C0020615", def: "Abnormally low blood glucose concentration.", type: "DISEASE", conf: 0.93 },
+  "hyperkalemia": { cui: "C0020461", def: "Abnormally elevated serum potassium level.", type: "DISEASE", conf: 0.94 },
+  "hyponatremia": { cui: "C0020625", def: "Abnormally low serum sodium concentration.", type: "DISEASE", conf: 0.93 },
+  "dvt": { cui: "C0149871", def: "Deep vein thrombosis — blood clot in a deep vein.", type: "DISEASE", conf: 0.91 },
+  "chest pain": { cui: "C0008031", def: "Pain or discomfort in the chest area.", type: "DISEASE", conf: 0.85 },
+  "shortness of breath": { cui: "C0013404", def: "Difficulty breathing or dyspnea.", type: "DISEASE", conf: 0.84 },
+  "dyspnea": { cui: "C0013404", def: "Subjective difficulty or distress in breathing.", type: "DISEASE", conf: 0.92 },
+  "tachycardia": { cui: "C0039231", def: "Abnormally rapid heart rate, usually over 100 beats per minute.", type: "DISEASE", conf: 0.93 },
+  "bradycardia": { cui: "C0428977", def: "Abnormally slow heart rate, usually under 60 beats per minute.", type: "DISEASE", conf: 0.93 },
+  "hypotension": { cui: "C0020649", def: "Abnormally low blood pressure.", type: "DISEASE", conf: 0.92 },
+  "fever": { cui: "C0015967", def: "Elevation of body temperature above the normal range.", type: "DISEASE", conf: 0.82 },
+  "nausea": { cui: "C0027497", def: "Unpleasant sensation of the urge to vomit.", type: "DISEASE", conf: 0.80 },
+  "acute kidney injury": { cui: "C0022660", def: "Sudden loss of kidney function over hours to days.", type: "DISEASE", conf: 0.95 },
+  "renal failure": { cui: "C0035078", def: "Loss of kidney function.", type: "DISEASE", conf: 0.93 },
+
+  // MEDICATIONS
+  "metformin": { cui: "C0025598", def: "Biguanide oral antihyperglycemic agent; first-line therapy for type 2 diabetes.", type: "MEDICATION", conf: 0.97 },
+  "lisinopril": { cui: "C0065374", def: "ACE inhibitor used in treatment of hypertension and heart failure.", type: "MEDICATION", conf: 0.97 },
+  "amlodipine": { cui: "C0051696", def: "Calcium channel blocker used to treat hypertension and angina.", type: "MEDICATION", conf: 0.96 },
+  "atorvastatin": { cui: "C0286651", def: "HMG-CoA reductase inhibitor (statin) for hyperlipidemia and cardiovascular risk.", type: "MEDICATION", conf: 0.97 },
+  "aspirin": { cui: "C0004057", def: "Salicylate NSAID with antiplatelet, analgesic, and antipyretic properties.", type: "MEDICATION", conf: 0.96 },
+  "warfarin": { cui: "C0043031", def: "Vitamin K antagonist anticoagulant used to prevent blood clots.", type: "MEDICATION", conf: 0.97 },
+  "heparin": { cui: "C0019134", def: "Anticoagulant that prevents blood clot formation.", type: "MEDICATION", conf: 0.96 },
+  "enoxaparin": { cui: "C0206460", def: "Low molecular weight heparin used as anticoagulant.", type: "MEDICATION", conf: 0.95 },
+  "insulin": { cui: "C0021641", def: "Peptide hormone that regulates blood glucose levels.", type: "MEDICATION", conf: 0.94 },
+  "insulin glargine": { cui: "C0907402", def: "Long-acting insulin analog for diabetes management.", type: "MEDICATION", conf: 0.96 },
+  "metoprolol": { cui: "C0025859", def: "Beta-1 selective adrenergic blocker for hypertension and heart failure.", type: "MEDICATION", conf: 0.96 },
+  "carvedilol": { cui: "C0071097", def: "Non-selective beta-blocker with alpha-1 blocking activity.", type: "MEDICATION", conf: 0.95 },
+  "furosemide": { cui: "C0016860", def: "Loop diuretic used for edema and heart failure.", type: "MEDICATION", conf: 0.96 },
+  "hydrochlorothiazide": { cui: "C0020261", def: "Thiazide diuretic used for hypertension.", type: "MEDICATION", conf: 0.95 },
+  "omeprazole": { cui: "C0028978", def: "Proton pump inhibitor that reduces gastric acid production.", type: "MEDICATION", conf: 0.96 },
+  "pantoprazole": { cui: "C0081876", def: "Proton pump inhibitor for GERD and peptic ulcers.", type: "MEDICATION", conf: 0.95 },
+  "clopidogrel": { cui: "C0070166", def: "Antiplatelet agent that inhibits P2Y12 receptor.", type: "MEDICATION", conf: 0.96 },
+  "prednisone": { cui: "C0032952", def: "Synthetic corticosteroid with anti-inflammatory and immunosuppressive properties.", type: "MEDICATION", conf: 0.95 },
+  "dexamethasone": { cui: "C0011777", def: "Potent synthetic corticosteroid.", type: "MEDICATION", conf: 0.95 },
+  "amoxicillin": { cui: "C0002645", def: "Broad-spectrum penicillin antibiotic.", type: "MEDICATION", conf: 0.96 },
+  "azithromycin": { cui: "C0052796", def: "Macrolide antibiotic used for bacterial infections.", type: "MEDICATION", conf: 0.95 },
+  "ciprofloxacin": { cui: "C0008809", def: "Fluoroquinolone antibiotic for various bacterial infections.", type: "MEDICATION", conf: 0.95 },
+  "vancomycin": { cui: "C0042313", def: "Glycopeptide antibiotic effective against gram-positive bacteria.", type: "MEDICATION", conf: 0.96 },
+  "piperacillin-tazobactam": { cui: "C0250480", def: "Broad-spectrum combination antibiotic (beta-lactam/beta-lactamase inhibitor).", type: "MEDICATION", conf: 0.95 },
+  "levothyroxine": { cui: "C0040165", def: "Synthetic thyroid hormone for hypothyroidism treatment.", type: "MEDICATION", conf: 0.96 },
+  "gabapentin": { cui: "C0060926", def: "Anticonvulsant also used for neuropathic pain.", type: "MEDICATION", conf: 0.95 },
+  "oxycodone": { cui: "C0030049", def: "Opioid analgesic for moderate to severe pain.", type: "MEDICATION", conf: 0.94 },
+  "morphine": { cui: "C0026549", def: "Potent opioid analgesic.", type: "MEDICATION", conf: 0.95 },
+  "acetaminophen": { cui: "C0000970", def: "Analgesic and antipyretic agent (paracetamol).", type: "MEDICATION", conf: 0.94 },
+  "ibuprofen": { cui: "C0020740", def: "Nonsteroidal anti-inflammatory drug (NSAID).", type: "MEDICATION", conf: 0.95 },
+  "apixaban": { cui: "C1831808", def: "Direct oral anticoagulant (factor Xa inhibitor).", type: "MEDICATION", conf: 0.96 },
+  "rivaroxaban": { cui: "C1739768", def: "Direct oral anticoagulant (factor Xa inhibitor).", type: "MEDICATION", conf: 0.95 },
+  "losartan": { cui: "C0126174", def: "Angiotensin II receptor blocker (ARB) for hypertension.", type: "MEDICATION", conf: 0.96 },
+  "spironolactone": { cui: "C0037982", def: "Potassium-sparing diuretic and aldosterone antagonist.", type: "MEDICATION", conf: 0.95 },
+  "digoxin": { cui: "C0012265", def: "Cardiac glycoside for heart failure and atrial fibrillation.", type: "MEDICATION", conf: 0.96 },
+  "albuterol": { cui: "C0001927", def: "Short-acting beta-2 agonist bronchodilator for asthma.", type: "MEDICATION", conf: 0.95 },
+  "fluticasone": { cui: "C0082607", def: "Inhaled corticosteroid for asthma and allergic rhinitis.", type: "MEDICATION", conf: 0.94 },
+  "ceftriaxone": { cui: "C0007561", def: "Third-generation cephalosporin antibiotic.", type: "MEDICATION", conf: 0.95 },
+  "levofloxacin": { cui: "C0282386", def: "Fluoroquinolone antibiotic.", type: "MEDICATION", conf: 0.95 },
+  "sertraline": { cui: "C0074393", def: "Selective serotonin reuptake inhibitor (SSRI) antidepressant.", type: "MEDICATION", conf: 0.95 },
+  "lorazepam": { cui: "C0024002", def: "Benzodiazepine for anxiety and sedation.", type: "MEDICATION", conf: 0.95 },
+  "potassium chloride": { cui: "C0032825", def: "Electrolyte supplement for potassium replacement.", type: "MEDICATION", conf: 0.92 },
+  "normal saline": { cui: "C0445115", def: "0.9% sodium chloride intravenous solution.", type: "MEDICATION", conf: 0.88 },
+  "nitroglycerin": { cui: "C0017887", def: "Vasodilator for angina and heart failure.", type: "MEDICATION", conf: 0.95 },
+  "dobutamine": { cui: "C0012963", def: "Sympathomimetic inotrope for heart failure.", type: "MEDICATION", conf: 0.95 },
+  "norepinephrine": { cui: "C0028351", def: "Vasopressor for septic shock and hypotension.", type: "MEDICATION", conf: 0.94 },
+  "epinephrine": { cui: "C0014563", def: "Catecholamine for anaphylaxis and cardiac arrest.", type: "MEDICATION", conf: 0.95 },
+
+  // PROCEDURES
+  "echocardiogram": { cui: "C0013516", def: "Ultrasound imaging of the heart to evaluate structure and function.", type: "PROCEDURE", conf: 0.95 },
+  "echocardiography": { cui: "C0013516", def: "Use of ultrasound to examine the heart.", type: "PROCEDURE", conf: 0.95 },
+  "coronary angiography": { cui: "C0085532", def: "X-ray imaging of coronary arteries using contrast dye.", type: "PROCEDURE", conf: 0.96 },
+  "cardiac catheterization": { cui: "C0018795", def: "Insertion of a catheter into the heart chambers for diagnosis.", type: "PROCEDURE", conf: 0.96 },
+  "percutaneous coronary intervention": { cui: "C1532338", def: "Non-surgical procedure to treat coronary artery narrowing (angioplasty with stenting).", type: "PROCEDURE", conf: 0.97 },
+  "coronary artery bypass grafting": { cui: "C0010055", def: "Surgical procedure to restore blood flow to the heart.", type: "PROCEDURE", conf: 0.97 },
+  "cabg": { cui: "C0010055", def: "Coronary artery bypass grafting — open-heart surgery.", type: "PROCEDURE", conf: 0.93 },
+  "ct scan": { cui: "C0040405", def: "Computed tomography imaging.", type: "PROCEDURE", conf: 0.93 },
+  "ct angiography": { cui: "C1536105", def: "CT scan with contrast to visualize blood vessels.", type: "PROCEDURE", conf: 0.95 },
+  "chest x-ray": { cui: "C0039985", def: "Radiographic imaging of the chest.", type: "PROCEDURE", conf: 0.94 },
+  "mri": { cui: "C0024485", def: "Magnetic resonance imaging.", type: "PROCEDURE", conf: 0.93 },
+  "intubation": { cui: "C0021925", def: "Insertion of a tube into the trachea for mechanical ventilation.", type: "PROCEDURE", conf: 0.95 },
+  "mechanical ventilation": { cui: "C0199470", def: "Use of a machine to assist or replace breathing.", type: "PROCEDURE", conf: 0.95 },
+  "dialysis": { cui: "C0011946", def: "Process of removing waste and excess fluid from the blood.", type: "PROCEDURE", conf: 0.95 },
+  "hemodialysis": { cui: "C0019004", def: "Renal replacement therapy using a dialysis machine.", type: "PROCEDURE", conf: 0.96 },
+  "endoscopy": { cui: "C0014245", def: "Visual examination of internal organs using a flexible scope.", type: "PROCEDURE", conf: 0.94 },
+  "colonoscopy": { cui: "C0009378", def: "Endoscopic examination of the colon.", type: "PROCEDURE", conf: 0.95 },
+  "biopsy": { cui: "C0005558", def: "Removal of tissue for microscopic examination.", type: "PROCEDURE", conf: 0.94 },
+  "blood transfusion": { cui: "C0005841", def: "Transfer of blood or blood products into a patient.", type: "PROCEDURE", conf: 0.94 },
+  "lumbar puncture": { cui: "C0037943", def: "Insertion of a needle into the subarachnoid space to collect CSF.", type: "PROCEDURE", conf: 0.95 },
+  "thoracentesis": { cui: "C0189477", def: "Needle aspiration of fluid from the pleural space.", type: "PROCEDURE", conf: 0.96 },
+  "paracentesis": { cui: "C0030579", def: "Needle aspiration of fluid from the peritoneal cavity.", type: "PROCEDURE", conf: 0.95 },
+  "electrocardiogram": { cui: "C0013798", def: "Recording of electrical activity of the heart.", type: "PROCEDURE", conf: 0.95 },
+  "ekg": { cui: "C0013798", def: "Electrocardiogram — records heart electrical activity.", type: "PROCEDURE", conf: 0.92 },
+  "ecg": { cui: "C0013798", def: "Electrocardiogram.", type: "PROCEDURE", conf: 0.92 },
+  "ultrasound": { cui: "C0041618", def: "Diagnostic imaging using high-frequency sound waves.", type: "PROCEDURE", conf: 0.92 },
+  "bronchoscopy": { cui: "C0006290", def: "Visual examination of the airways using a bronchoscope.", type: "PROCEDURE", conf: 0.95 },
+  "tracheostomy": { cui: "C0040590", def: "Surgical creation of an opening in the trachea.", type: "PROCEDURE", conf: 0.96 },
+  "appendectomy": { cui: "C0003611", def: "Surgical removal of the appendix.", type: "PROCEDURE", conf: 0.96 },
+  "cholecystectomy": { cui: "C0008320", def: "Surgical removal of the gallbladder.", type: "PROCEDURE", conf: 0.96 },
+
+  // ANATOMY
+  "left ventricle": { cui: "C0225897", def: "Lower left chamber of the heart responsible for systemic circulation.", type: "ANATOMY", conf: 0.93 },
+  "right ventricle": { cui: "C0225883", def: "Lower right chamber of the heart responsible for pulmonary circulation.", type: "ANATOMY", conf: 0.93 },
+  "left atrium": { cui: "C0225860", def: "Upper left chamber of the heart receiving oxygenated blood from the lungs.", type: "ANATOMY", conf: 0.92 },
+  "coronary arteries": { cui: "C0205042", def: "Arteries that supply blood to the myocardium.", type: "ANATOMY", conf: 0.93 },
+  "aorta": { cui: "C0003483", def: "The largest artery in the body, carrying oxygenated blood from the heart.", type: "ANATOMY", conf: 0.94 },
+  "pulmonary artery": { cui: "C0034052", def: "Artery carrying deoxygenated blood from the right ventricle to the lungs.", type: "ANATOMY", conf: 0.93 },
+  "lungs": { cui: "C0024109", def: "Paired respiratory organs in the thorax.", type: "ANATOMY", conf: 0.90 },
+  "liver": { cui: "C0023884", def: "Largest solid organ, responsible for metabolism and detoxification.", type: "ANATOMY", conf: 0.91 },
+  "kidneys": { cui: "C0022646", def: "Paired organs responsible for filtration and waste excretion.", type: "ANATOMY", conf: 0.91 },
+  "pancreas": { cui: "C0030274", def: "Glandular organ producing digestive enzymes and insulin.", type: "ANATOMY", conf: 0.92 },
+  "myocardium": { cui: "C0027061", def: "The muscular tissue of the heart.", type: "ANATOMY", conf: 0.93 },
+  "cerebral cortex": { cui: "C0007776", def: "Outer layer of the cerebrum involved in higher brain functions.", type: "ANATOMY", conf: 0.92 },
+  "femoral artery": { cui: "C0015801", def: "Major artery supplying blood to the lower extremity.", type: "ANATOMY", conf: 0.93 },
+  "carotid artery": { cui: "C0007272", def: "Major artery in the neck supplying blood to the brain.", type: "ANATOMY", conf: 0.93 },
+  "pleura": { cui: "C0032225", def: "Double-layered membrane surrounding the lungs.", type: "ANATOMY", conf: 0.92 },
+  "peritoneum": { cui: "C0031153", def: "Serous membrane lining the abdominal cavity.", type: "ANATOMY", conf: 0.91 },
+  "bronchi": { cui: "C0006255", def: "Main passageways into the lungs.", type: "ANATOMY", conf: 0.91 },
+  "esophagus": { cui: "C0014876", def: "Muscular tube connecting the throat to the stomach.", type: "ANATOMY", conf: 0.92 },
+  "abdomen": { cui: "C0000726", def: "Body region between the thorax and pelvis.", type: "ANATOMY", conf: 0.87 },
+  "thorax": { cui: "C0040113", def: "The chest; body region between the neck and abdomen.", type: "ANATOMY", conf: 0.88 },
+
+  // LAB TESTS
+  "complete blood count": { cui: "C0009555", def: "Panel measuring red cells, white cells, hemoglobin, hematocrit, and platelets.", type: "LAB_TEST", conf: 0.95 },
+  "cbc": { cui: "C0009555", def: "Complete blood count.", type: "LAB_TEST", conf: 0.92 },
+  "basic metabolic panel": { cui: "C0428321", def: "Blood test measuring glucose, calcium, electrolytes, and kidney function.", type: "LAB_TEST", conf: 0.94 },
+  "bmp": { cui: "C0428321", def: "Basic metabolic panel.", type: "LAB_TEST", conf: 0.90 },
+  "comprehensive metabolic panel": { cui: "C0747307", def: "Blood test including BMP plus liver function and proteins.", type: "LAB_TEST", conf: 0.94 },
+  "hemoglobin a1c": { cui: "C0019018", def: "Glycated hemoglobin test measuring average blood sugar over 2-3 months.", type: "LAB_TEST", conf: 0.96 },
+  "hba1c": { cui: "C0019018", def: "Hemoglobin A1c — glycemic control marker.", type: "LAB_TEST", conf: 0.93 },
+  "troponin": { cui: "C0041199", def: "Cardiac biomarker released during myocardial injury.", type: "LAB_TEST", conf: 0.95 },
+  "bnp": { cui: "C0054015", def: "B-type natriuretic peptide — marker for heart failure.", type: "LAB_TEST", conf: 0.94 },
+  "procalcitonin": { cui: "C0072069", def: "Biomarker for bacterial infection and sepsis.", type: "LAB_TEST", conf: 0.94 },
+  "creatinine": { cui: "C0010294", def: "Metabolic waste product used to assess kidney function.", type: "LAB_TEST", conf: 0.93 },
+  "blood urea nitrogen": { cui: "C0005845", def: "Measure of urea in blood reflecting kidney function.", type: "LAB_TEST", conf: 0.93 },
+  "bun": { cui: "C0005845", def: "Blood urea nitrogen.", type: "LAB_TEST", conf: 0.90 },
+  "gfr": { cui: "C0017654", def: "Glomerular filtration rate — kidney function measure.", type: "LAB_TEST", conf: 0.93 },
+  "inr": { cui: "C0525032", def: "International normalized ratio for monitoring anticoagulation.", type: "LAB_TEST", conf: 0.94 },
+  "prothrombin time": { cui: "C0033707", def: "Coagulation test measuring time for blood to clot.", type: "LAB_TEST", conf: 0.94 },
+  "lipid panel": { cui: "C0200382", def: "Blood test measuring cholesterol and triglyceride levels.", type: "LAB_TEST", conf: 0.93 },
+  "thyroid function tests": { cui: "C0040128", def: "Tests measuring thyroid hormone levels.", type: "LAB_TEST", conf: 0.93 },
+  "tsh": { cui: "C0040160", def: "Thyroid-stimulating hormone level.", type: "LAB_TEST", conf: 0.93 },
+  "blood culture": { cui: "C0200949", def: "Microbiological test to detect bacteria in blood.", type: "LAB_TEST", conf: 0.94 },
+  "urinalysis": { cui: "C0042014", def: "Laboratory analysis of urine for various markers.", type: "LAB_TEST", conf: 0.93 },
+  "arterial blood gas": { cui: "C0150411", def: "Test measuring oxygen, CO2, and pH in arterial blood.", type: "LAB_TEST", conf: 0.94 },
+  "abg": { cui: "C0150411", def: "Arterial blood gas.", type: "LAB_TEST", conf: 0.91 },
+  "d-dimer": { cui: "C0060323", def: "Fibrin degradation fragment used to rule out thrombosis.", type: "LAB_TEST", conf: 0.94 },
+  "lactate": { cui: "C0022924", def: "Blood lactate level — marker for tissue hypoperfusion.", type: "LAB_TEST", conf: 0.92 },
+  "serum albumin": { cui: "C0201838", def: "Blood test measuring albumin protein level.", type: "LAB_TEST", conf: 0.92 },
+  "liver function tests": { cui: "C0023901", def: "Blood tests evaluating liver health (ALT, AST, bilirubin, etc.).", type: "LAB_TEST", conf: 0.93 },
+  "hemoglobin": { cui: "C0019046", def: "Protein in red blood cells that carries oxygen.", type: "LAB_TEST", conf: 0.89 },
+  "platelet count": { cui: "C0032181", def: "Measurement of platelets (thrombocytes) in blood.", type: "LAB_TEST", conf: 0.92 },
+  "white blood cell count": { cui: "C0023508", def: "Measurement of leukocytes in the blood.", type: "LAB_TEST", conf: 0.92 },
+  "electrolytes": { cui: "C0013832", def: "Blood levels of sodium, potassium, chloride, and bicarbonate.", type: "LAB_TEST", conf: 0.89 },
+  "blood glucose": { cui: "C0005802", def: "Measurement of sugar (glucose) in the blood.", type: "LAB_TEST", conf: 0.91 },
+  "serum creatinine": { cui: "C0201975", def: "Blood test for creatinine to assess kidney function.", type: "LAB_TEST", conf: 0.93 },
+  "c-reactive protein": { cui: "C0006560", def: "Inflammatory marker produced by the liver.", type: "LAB_TEST", conf: 0.93 },
+  "crp": { cui: "C0006560", def: "C-reactive protein — inflammation marker.", type: "LAB_TEST", conf: 0.91 },
+  "pt/inr": { cui: "C0525032", def: "Prothrombin time/international normalized ratio.", type: "LAB_TEST", conf: 0.92 }
+};
+
+// Sort KB keys by length (longest first) for greedy matching
+const KB_KEYS = Object.keys(UMLS_KB).sort((a, b) => b.length - a.length);
+
+const SAMPLES = [
+  `Patient is a 67-year-old male with a history of type 2 diabetes mellitus, hypertension, and coronary artery disease, presenting with shortness of breath and peripheral edema. Current medications include metformin 1000mg BID, lisinopril 20mg daily, atorvastatin 40mg daily, and metoprolol 50mg BID. Echocardiogram shows left ventricle ejection fraction of 35%. Labs notable for elevated troponin, BNP 1200 pg/mL, serum creatinine 1.8 mg/dL. Started on furosemide 40mg IV and cardiology consulted for cardiac catheterization.`,
+
+  `DISCHARGE SUMMARY: 54-year-old female admitted for community-acquired pneumonia complicated by sepsis. CT scan of the chest revealed bilateral pleural effusion. Blood culture grew Streptococcus pneumoniae. Treated with ceftriaxone and azithromycin. Required intubation and mechanical ventilation for 3 days. Labs showed elevated procalcitonin, white blood cell count 18,000, and lactate 4.2 mmol/L. Arterial blood gas demonstrated respiratory acidosis. Patient improved, extubated on day 4. Discharged on levofloxacin with follow-up chest x-ray in 2 weeks.`,
+
+  `Assessment: 72-year-old with atrial fibrillation on apixaban, chronic kidney disease stage 3, hypothyroidism on levothyroxine, and rheumatoid arthritis managed with prednisone. Presents with acute pancreatitis. CT scan of the abdomen showed pancreas inflammation with no necrosis. Labs: lipase elevated, complete blood count with mild anemia, basic metabolic panel showing hyperkalemia at 5.8 mEq/L, hemoglobin a1c 7.2%. Plan: NPO, normal saline hydration, pain control with acetaminophen, monitor electrolytes and renal function. Hold apixaban given acute illness. Nephrology and gastroenterology consulted.`
+];
+
+function tokenize(text) {
+  return text.split(/(\s+|(?=[.,;:!?()\[\]{}])|(?<=[.,;:!?()\[\]{}]))/).filter(t => t.length > 0);
+}
+
+function extractEntities(text) {
+  const lower = text.toLowerCase();
+  const entities = [];
+  const used = new Set(); // track character positions already matched
+
+  for (const key of KB_KEYS) {
+    let searchFrom = 0;
+    while (true) {
+      const idx = lower.indexOf(key, searchFrom);
+      if (idx === -1) break;
+
+      // Check word boundaries
+      const before = idx > 0 ? lower[idx - 1] : ' ';
+      const after = idx + key.length < lower.length ? lower[idx + key.length] : ' ';
+      const boundaryChars = /[\s.,;:!?()\[\]{}\-\/]/;
+
+      if ((idx === 0 || boundaryChars.test(before)) &&
+          (idx + key.length === lower.length || boundaryChars.test(after))) {
+
+        // Check overlap
+        let overlap = false;
+        for (let i = idx; i < idx + key.length; i++) {
+          if (used.has(i)) { overlap = true; break; }
+        }
+
+        if (!overlap) {
+          const kb = UMLS_KB[key];
+          // Small random jitter on confidence
+          const conf = Math.min(1, Math.max(0.7, kb.conf + (Math.random() - 0.5) * 0.04));
+          entities.push({
+            text: text.substring(idx, idx + key.length),
+            start: idx,
+            end: idx + key.length,
+            type: kb.type,
+            cui: kb.cui,
+            def: kb.def,
+            conf: conf
+          });
+          for (let i = idx; i < idx + key.length; i++) used.add(i);
+        }
+      }
+      searchFrom = idx + 1;
+    }
+  }
+
+  entities.sort((a, b) => a.start - b.start);
+  return entities;
+}
+
+function buildAnnotatedHTML(text, entities) {
+  if (entities.length === 0) return escapeHTML(text);
+  let html = '';
+  let lastIdx = 0;
+  entities.forEach((ent, i) => {
+    html += escapeHTML(text.substring(lastIdx, ent.start));
+    html += `<span class="entity-tag ${ent.type}" data-idx="${i}">${escapeHTML(ent.text)}<span class="label">${ent.type.replace('_',' ')}</span></span>`;
+    lastIdx = ent.end;
+  });
+  html += escapeHTML(text.substring(lastIdx));
+  return html;
+}
+
+function escapeHTML(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function buildEntityTable(entities) {
+  // Deduplicate by text+type
+  const seen = new Map();
+  entities.forEach(e => {
+    const key = e.text.toLowerCase() + '|' + e.type;
+    if (!seen.has(key) || e.conf > seen.get(key).conf) {
+      seen.set(key, e);
+    }
+  });
+  const unique = [...seen.values()].sort((a, b) => b.conf - a.conf);
+
+  if (unique.length === 0) return '<div class="empty-state">No entities extracted yet</div>';
+
+  let html = '<table class="entity-table"><thead><tr><th>Entity</th><th>Type</th><th>UMLS CUI</th><th>Confidence</th></tr></thead><tbody>';
+  unique.forEach(e => {
+    const pct = Math.round(e.conf * 100);
+    html += `<tr>
+      <td>${escapeHTML(e.text)}</td>
+      <td><span class="type-dot ${e.type}"></span>${e.type.replace('_',' ')}</td>
+      <td style="color:var(--accent);font-size:0.7rem">${e.cui}</td>
+      <td><span class="conf-bar"><span class="conf-fill" style="width:${pct}%"></span></span>${pct}%</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+let currentEntities = [];
+
+async function runNER() {
+  const text = document.getElementById('inputText').value.trim();
+  if (!text) return;
+
+  const btn = document.getElementById('btnRun');
+  const proc = document.getElementById('processing');
+  const output = document.getElementById('outputArea');
+  const procText = document.getElementById('procText');
+
+  btn.classList.add('processing');
+  btn.textContent = '⟳ Processing...';
+  output.innerHTML = '';
+  proc.classList.add('active');
+
+  const steps = ['Running tokenizer...', 'POS tagger active...', 'Dependency parser...', 'NER model inference...', 'UMLS entity linking...', 'Generating output...'];
+  const nodes = document.querySelectorAll('.pipe-node');
+
+  const startTime = performance.now();
+
+  for (let i = 0; i < steps.length; i++) {
+    procText.textContent = steps[i];
+    nodes.forEach(n => n.classList.remove('active'));
+    nodes[i].classList.add('active');
+    await sleep(200 + Math.random() * 200);
+  }
+
+  const entities = extractEntities(text);
+  currentEntities = entities;
+  const elapsed = Math.round(performance.now() - startTime);
+
+  proc.classList.remove('active');
+  output.innerHTML = buildAnnotatedHTML(text, entities);
+  output.classList.add('fade-in');
+
+  // Stats
+  const tokens = tokenize(text);
+  const sents = text.split(/[.!?]+/).filter(s => s.trim().length > 0).length;
+  const unique = new Set(entities.map(e => e.text.toLowerCase() + '|' + e.type)).size;
+  const avgConf = entities.length > 0
+    ? (entities.reduce((s, e) => s + e.conf, 0) / entities.length).toFixed(2)
+    : '—';
+
+  document.getElementById('statTokens').textContent = tokens.length;
+  document.getElementById('statEntities').textContent = entities.length;
+  document.getElementById('statLinked').textContent = unique;
+  document.getElementById('statTime').textContent = elapsed;
+  document.getElementById('statSents').textContent = sents;
+  document.getElementById('statAvgConf').textContent = avgConf;
+
+  document.getElementById('entityCount').textContent = entities.length + ' entities';
+  document.getElementById('uniqueCount').textContent = unique + ' unique';
+
+  // Table
+  document.getElementById('entityTableWrap').innerHTML = buildEntityTable(entities);
+
+  btn.classList.remove('processing');
+  btn.textContent = '▶ Extract Entities';
+
+  // Keep all nodes lit
+  nodes.forEach(n => n.classList.add('active'));
+
+  // Attach hover tooltips
+  attachTooltips();
+}
+
+function attachTooltips() {
+  const tooltip = document.getElementById('tooltip');
+  document.querySelectorAll('.entity-tag').forEach(el => {
+    el.addEventListener('mouseenter', (e) => {
+      const idx = parseInt(el.dataset.idx);
+      const ent = currentEntities[idx];
+      if (!ent) return;
+      document.getElementById('ttTitle').textContent = ent.text;
+      document.getElementById('ttCui').textContent = ent.cui + ' · ' + ent.type.replace('_', ' ');
+      document.getElementById('ttDef').textContent = ent.def;
+      tooltip.classList.add('visible');
+    });
+    el.addEventListener('mousemove', (e) => {
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 12) + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      tooltip.classList.remove('visible');
+    });
+  });
+}
+
+function loadSample(idx) {
+  document.getElementById('inputText').value = SAMPLES[idx];
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Load first sample on start
+loadSample(0);
+</script>
+</body>
+</html>

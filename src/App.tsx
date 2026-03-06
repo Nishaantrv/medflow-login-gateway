@@ -27,6 +27,8 @@ const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminBeds = lazy(() => import("./pages/admin/AdminBeds"));
 const AdminStaff = lazy(() => import("./pages/admin/AdminStaff"));
 const AdminBilling = lazy(() => import("./pages/admin/AdminBilling"));
+const AdminAI = lazy(() => import("./pages/admin/AdminAI"));
+const MedicalNER = lazy(() => import("./pages/ai/MedicalNER"));
 
 // Family pages
 const FamilyDashboard = lazy(() => import("./pages/family/FamilyDashboard"));
@@ -95,12 +97,15 @@ const App = () => (
             <Route path="/doctor/soap-notes" element={<ProtectedLayout><DoctorSoapNotes /></ProtectedLayout>} />
             <Route path="/doctor/patients" element={<ProtectedLayout><DoctorPatients /></ProtectedLayout>} />
             <Route path="/doctor/schedule" element={<ProtectedLayout><DoctorSchedule /></ProtectedLayout>} />
+            <Route path="/doctor/medical-ner" element={<ProtectedLayout><MedicalNER /></ProtectedLayout>} />
 
             {/* Admin */}
             <Route path="/admin/dashboard" element={<ProtectedLayout><AdminDashboard /></ProtectedLayout>} />
             <Route path="/admin/beds" element={<ProtectedLayout><AdminBeds /></ProtectedLayout>} />
             <Route path="/admin/staff" element={<ProtectedLayout><AdminStaff /></ProtectedLayout>} />
             <Route path="/admin/billing" element={<ProtectedLayout><AdminBilling /></ProtectedLayout>} />
+            <Route path="/admin/ai" element={<ProtectedLayout><AdminAI /></ProtectedLayout>} />
+            <Route path="/admin/medical-ner" element={<ProtectedLayout><MedicalNER /></ProtectedLayout>} />
 
             {/* Family */}
             <Route path="/family/dashboard" element={<ProtectedLayout><FamilyDashboard /></ProtectedLayout>} />

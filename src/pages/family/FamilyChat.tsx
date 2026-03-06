@@ -2,16 +2,19 @@ import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase as externalSupabase } from '@/integrations/supabase/client';
 import { callAgent } from '@/services/aiAgent';
-import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
+import { analyzeReadability } from '@/services/readabilityScorer';
+import ReadabilityBadge from '@/components/family/ReadabilityBadge';
 
 interface Message {
   id: string;
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
+  isSimplified?: boolean;
 }
 
 const FamilyChat = () => {
@@ -104,7 +107,7 @@ const FamilyChat = () => {
           content: m.text
         }));
 
-      const res = await callAgent({
+      let res = await callAgent({
         agent_type: 'family_agent',
         user_message: userMessage.text,
         conversation_history: history,
@@ -113,11 +116,32 @@ const FamilyChat = () => {
 
       console.log("MedFlow AI (Family) Version:", (res as any).ai_version);
 
+      let finalReply = res.reply;
+      let isSimplified = false;
+
+      // Readability check and automatic simplification
+      const analysis = analyzeReadability(finalReply);
+      if (analysis.grade > 8) {
+        console.log(`[Readability] Grade ${analysis.grade} too high. Requesting simplification...`);
+        const simplificationPrompt = `The following text is too complex for a family member to understand (Grade level: ${analysis.grade}). Please rewrite it at a 6th grade reading level using simpler words, shorter sentences, and everyday language. Keep all the medical facts accurate but make them easy to understand:\n\n${finalReply}`;
+
+        const simplifiedRes = await callAgent({
+          agent_type: 'family_agent',
+          user_message: simplificationPrompt,
+          conversation_history: history,
+          user_id: db_id || undefined,
+        });
+
+        finalReply = simplifiedRes.reply;
+        isSimplified = true;
+      }
+
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
-        text: res.reply,
+        text: finalReply,
         sender: 'ai',
-        timestamp: new Date()
+        timestamp: new Date(),
+        isSimplified
       }]);
     } catch (err) {
       console.error('Error in AI chat:', err);
@@ -165,16 +189,27 @@ const FamilyChat = () => {
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${msg.sender === 'ai' ? 'bg-teal-500/20 text-teal-400' : 'bg-purple-500/20 text-purple-400'}`}>
                 {msg.sender === 'ai' ? <Bot size={18} /> : <User size={18} />}
               </div>
-              <div className={`max-w-[80%] md:max-w-[60%] p-4 rounded-2xl text-sm leading-relaxed ${msg.sender === 'ai' ? 'bg-[#1A1F35]/50 text-gray-200 border border-[#1A1F35]' : 'bg-teal-600 text-white shadow-lg shadow-teal-500/10'}`}>
+              <div className={`max-w-[80%] md:max-w-[60%] p-4 rounded-2xl text-sm leading-relaxed relative ${msg.sender === 'ai' ? 'bg-[#1A1F35]/50 text-gray-200 border border-[#1A1F35]' : 'bg-teal-600 text-white shadow-lg shadow-teal-500/10'}`}>
+                {msg.sender === 'ai' && msg.isSimplified && (
+                  <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold text-teal-400 uppercase tracking-widest bg-teal-500/5 py-1 px-2 rounded-lg border border-teal-500/10 w-fit">
+                    <RefreshCw size={10} className="animate-spin-slow" /> Simplified for easier reading
+                  </div>
+                )}
                 {msg.sender === 'ai' ? (
-                  <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
+                  <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 pb-2">
                     <ReactMarkdown>{msg.text}</ReactMarkdown>
                   </div>
                 ) : (
                   msg.text
                 )}
-                <div className={`text-[10px] mt-2 ${msg.sender === 'ai' ? 'text-gray-500' : 'text-teal-200'}`}>
-                  {format(msg.timestamp, 'h:mm a')}
+
+                <div className="flex items-center justify-between mt-2">
+                  <div className={`text-[10px] ${msg.sender === 'ai' ? 'text-gray-500' : 'text-teal-200'}`}>
+                    {format(msg.timestamp, 'h:mm a')}
+                  </div>
+                  {msg.sender === 'ai' && (
+                    <ReadabilityBadge text={msg.text} />
+                  )}
                 </div>
               </div>
             </div>

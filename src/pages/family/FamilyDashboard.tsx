@@ -8,6 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
+import ReadabilityBadge from '@/components/family/ReadabilityBadge';
+import ReadabilityAnalytics from '@/components/family/ReadabilityAnalytics';
 
 interface FamilyMember {
   patient_id: string;
@@ -224,12 +226,20 @@ const FamilyDashboard = () => {
                     <p className="text-sm text-white font-medium italic leading-relaxed">
                       {aiSummary}
                     </p>
+                    <div className="mt-3 flex justify-end">
+                      <ReadabilityBadge text={aiSummary} />
+                    </div>
                   </div>
                 )}
-                <p className="text-sm text-gray-400 leading-relaxed font-medium">
-                  "Patient is responding well to current treatment plan. Vital signs are within normal parameters.
-                  Physical therapy session completed this morning with improved mobility noted in upper limbs."
-                </p>
+                <div className="relative group/text">
+                  <p className="text-sm text-gray-400 leading-relaxed font-medium">
+                    "Patient is responding well to current treatment plan. Vital signs are within normal parameters.
+                    Physical therapy session completed this morning with improved mobility noted in upper limbs."
+                  </p>
+                  <div className="mt-3 flex justify-end">
+                    <ReadabilityBadge text={"Patient is responding well to current treatment plan. Vital signs are within normal parameters. Physical therapy session completed this morning with improved mobility noted in upper limbs."} />
+                  </div>
+                </div>
                 <div className="mt-4 flex items-center gap-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Attending Physician: Dr. Sarah Chen
                 </div>
@@ -307,6 +317,9 @@ const FamilyDashboard = () => {
 
         {/* Sidebar Column */}
         <div className="space-y-8">
+          {/* Readability Analytics Card */}
+          <ReadabilityAnalytics userId={db_id || ''} />
+
           {/* Medications Section */}
           <div className="glass-card p-8 border-white/5 group h-full">
             <div className="flex items-center justify-between mb-10">

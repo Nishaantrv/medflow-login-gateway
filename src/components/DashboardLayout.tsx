@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LogOut, Menu, X, Bell, Home, MessageSquare, Calendar, Pill, Users, Bed, CreditCard, Heart, Activity, FileText, Settings, Shield } from 'lucide-react';
+import { LogOut, Menu, X, Bell, Home, MessageSquare, Calendar, Pill, Users, Bed, CreditCard, Heart, Activity, FileText, Settings, Shield, Brain, Dna } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -31,12 +31,15 @@ const navConfig: Record<AppRole, NavItem[]> = {
     { icon: <FileText size={18} />, label: 'Soap Notes', path: '/doctor/soap-notes' },
     { icon: <Users size={18} />, label: 'My Patients', path: '/doctor/patients' },
     { icon: <Calendar size={18} />, label: 'Schedule', path: '/doctor/schedule' },
+    { icon: <Dna size={18} />, label: 'Medical NER', path: '/doctor/medical-ner' },
   ],
   admin: [
     { icon: <Activity size={18} />, label: 'Operations', path: '/admin/dashboard' },
+    { icon: <Brain size={18} />, label: 'AI Analytics', path: '/admin/ai' },
     { icon: <Bed size={18} />, label: 'Bed Management', path: '/admin/beds' },
     { icon: <Users size={18} />, label: 'Staff Schedule', path: '/admin/staff' },
     { icon: <CreditCard size={18} />, label: 'Billing', path: '/admin/billing' },
+    { icon: <Dna size={18} />, label: 'Medical NER', path: '/admin/medical-ner' },
   ],
   family: [
     { icon: <Heart size={18} />, label: 'Health Status', path: '/family/dashboard' },
